@@ -1,6 +1,6 @@
 # ADR 0004: Real-brain integration tests and one canonical verification entrypoint
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Ocelot Harness maintainers
 
 ## Context

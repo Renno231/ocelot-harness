@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+set -eu
+
+sbt_version=1.8.3
+launcher_sha256=be5b810207403aece1449ce19b979c9c4cb36ea42e2e75b282464822535410da
+launcher_url=${SBT_LAUNCHER_URL:-https://repo.maven.apache.org/maven2/org/scala-sbt/sbt-launch/$sbt_version/sbt-launch-$sbt_version.jar}
+cache_root=${SBT_BOOTSTRAP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ocelot-harness/sbt}
+launcher="$cache_root/sbt-launch-$sbt_version.jar"
+
+if ! command -v java >/dev/null 2>&1; then
+  printf '%s\n' 'ERROR: Java 8 is required, but java was not found on PATH' >&2
+  exit 1
+fi
+java_version=$(java -version 2>&1) || {
+  printf '%s\n' 'ERROR: Java 8 is required, but java -version failed' >&2
+  exit 1
+}
+case "$java_version" in
+  *'version "1.8.'*) ;;
+  *)
+    printf '%s\n' 'ERROR: Java 8 is required; java -version reported:' >&2
+    printf '%s\n' "$java_version" >&2
+    exit 1
+    ;;
+esac
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf '%s\n' 'ERROR: sha256sum or shasum is required to verify the SBT launcher' >&2
+    exit 1
+  fi
+}
+
+verify_launcher() {
+  actual=$(sha256 "$1")
+  if [ "$actual" != "$launcher_sha256" ]; then
+    printf 'ERROR: SBT launcher checksum mismatch: expected %s, got %s\n' \
+      "$launcher_sha256" "$actual" >&2
+    return 1
+  fi
+}
+
+mkdir -p "$cache_root"
+if [ ! -f "$launcher" ]; then
+  temporary="$launcher.tmp.$$"
+  trap 'rm -f "$temporary"' EXIT HUP INT TERM
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --location --silent --show-error "$launcher_url" --output "$temporary"
+  elif command -v wget >/dev/null 2>&1; then
+    wget --quiet "$launcher_url" --output-document="$temporary"
+  else
+    printf '%s\n' 'ERROR: curl or wget is required to download the SBT launcher' >&2
+    exit 1
+  fi
+  verify_launcher "$temporary"
+  mv "$temporary" "$launcher"
+  trap - EXIT HUP INT TERM
+else
+  verify_launcher "$launcher"
+fi
+
+exec java -jar "$launcher" "$@"

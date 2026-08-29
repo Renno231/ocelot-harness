@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Proposed — implementation requires maintainer approval
+- **Status:** Approved — Slice 0 complete; Slice 1 requires maintainer approval
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -62,6 +62,9 @@ lib/ocelot-brain/
 
 ## Slice 0 — Reproducible build and dependency proof
 
+- **Status:** Complete
+- **Verified profiles:** Windows Temurin Java 8; clean ephemeral Linux Temurin Java 8
+
 ### Deliverables
 
 - multi-project SBT build with `harness-core`, `harness-app`, and pinned brain project reference
@@ -92,6 +95,8 @@ fresh clone
 ```
 
 Do not proceed if native Lua libraries or dependency downloads cannot be reproduced on Windows and Linux. Record exact resolved dependency versions.
+
+The pinned source build is the authoritative dependency record. Slice 0 resolved its exact runtime graph from `lib/ocelot-brain/build.sbt`, including OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1`; first-party test code directly declares ScalaTest `3.2.19`. No unused future feature dependencies are carried.
 
 ## Slice 1 — Process runtime ownership
 

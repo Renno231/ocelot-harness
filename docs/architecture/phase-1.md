@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 architecture
 
-- **Status:** Proposed for implementation approval
+- **Status:** Accepted
 - **Runtime:** Scala 2.13.10, SBT 1.8.3, Java 8 baseline
 - **Emulator dependency:** ocelot-brain 0.24.2 at commit `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -551,13 +551,13 @@ Every step has tick and wall-clock limits. A failure produces the diagnostic bun
 
 - pin Java baseline, Scala, SBT, plugins, direct libraries, and the brain submodule commit
 - use a checked download of the SBT launcher through repository wrapper scripts; do not commit the launcher binary
-- declare direct dependencies explicitly even when currently available transitively
+- declare each used library directly when its first caller is added, even when it is available transitively
 - keep ocelot-brain unmodified in Phase 1; carry any necessary patch as a documented commit in a dedicated fork only after approval
 - enable Scalafmt and strict first-party compiler warnings without imposing them on the upstream submodule
 - create one fat executable JAR from `harness-app`
 - expose one canonical verification command used locally and by future CI
 
-Initial direct library candidates:
+Feature library candidates, added only with their first caller:
 
 ```text
 Typesafe Config 1.4.4
@@ -566,7 +566,7 @@ scopt 4.1.0
 ScalaTest 3.2.19 (test)
 ```
 
-Versions are confirmed by a dependency-resolution spike before production code is added.
+Slice 0 confirmed the toolchain, brain runtime graph, and ScalaTest version. Candidate feature versions are rechecked when the corresponding behavior is implemented.
 
 ## Module quality assessment
 
@@ -579,9 +579,9 @@ Versions are confirmed by a dependency-resolution spike before production code i
 | Deletion test | No generic backend interface or one-method wrapper layers are introduced in Phase 1 |
 | Test surface | Public core behavior and protocol contracts are primary; pure render/validation algorithms receive focused direct tests |
 
-## Approval gate
+## Approved baseline
 
-Implementation begins only after review confirms:
+Phase 1 implementation approval confirms:
 
 1. Phase 1 scope and exclusions
 2. HOCON manifest shape and path policy

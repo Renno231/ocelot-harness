@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+set -eu
+
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+cd "$repository_root"
+
+expected_brain_commit=bec1cc6b1e9e588692f753e9c617063c74967fed
+actual_brain_commit=$(git -C lib/ocelot-brain rev-parse HEAD)
+if [ "$actual_brain_commit" != "$expected_brain_commit" ]; then
+  printf 'ERROR: ocelot-brain must be pinned to %s, found %s\n' \
+    "$expected_brain_commit" "$actual_brain_commit" >&2
+  exit 1
+fi
+if [ -n "$(git -C lib/ocelot-brain status --short)" ]; then
+  printf '%s\n' 'ERROR: lib/ocelot-brain contains uncommitted changes' >&2
+  exit 1
+fi
+printf 'PASS: clean ocelot-brain pin %s\n' "$actual_brain_commit"
+
+"$script_directory/test-sbt-bootstrap"
+"$script_directory/sbtw" \
+  ';scalafmtCheckAll;harnessCore/clean;harnessApp/clean;harnessCore/compile;harnessApp/compile;harnessCore/test;harnessApp/test;harnessApp/assembly'
+
+assembly_jar=modules/app/target/ocelot-harness.jar
+if [ ! -f "$assembly_jar" ]; then
+  printf 'ERROR: expected assembly was not created at %s\n' "$assembly_jar" >&2
+  exit 1
+fi
+
+smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
+trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
+smoke_output="$smoke_directory/output.log"
+java -jar "$assembly_jar" "$smoke_directory/native-libraries" >"$smoke_output" 2>&1
+cat "$smoke_output"
+grep -Fq 'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2' "$smoke_output"
+grep -Fq 'BRAIN_NATIVE_LUA_AVAILABLE=true' "$smoke_output"
+grep -Fq 'BRAIN_LIFECYCLE_SHUTDOWN' "$smoke_output"
+printf '%s\n' 'PASS: packaged brain lifecycle smoke test'

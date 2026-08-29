@@ -17,7 +17,7 @@ Stop and request design review when work requires changing a manifest or protoco
 - SBT 1.8.3
 - initialized `lib/ocelot-brain` submodule at the recorded commit
 
-After build bootstrap exists, use the repository wrappers and canonical verification scripts rather than a machine-global SBT installation.
+Use `scripts/sbtw` or `scripts\sbtw.cmd` for targeted SBT work rather than a machine-global installation. Before completing a slice, run the platform's canonical entrypoint: `scripts/verify` on POSIX/Git Bash or `scripts\verify.cmd` on Windows.
 
 ## Change discipline
 

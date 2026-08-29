@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 is designed and awaiting implementation approval. The repository currently contains architecture, decisions, and an executable implementation plan; production Scala code has not been started.
+Phase 1 architecture and its implementation plan are approved. Slice 0 is complete: the repository has a reproducible Java 8/SBT build, imports the pinned brain source without modifying it, and proves native Lua initialization and shutdown in a bounded forked process. Slice 1 requires maintainer approval.
 
 Start here:
 
@@ -20,7 +20,7 @@ Start here:
 3. [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
 4. [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Phase 1 capabilities
+## Planned Phase 1 capabilities
 
 - versioned HOCON project manifests with stable logical device IDs
 - validated OpenComputers hardware profiles
@@ -44,7 +44,22 @@ Ocelot Desktop canvas/window automation is outside Phase 1.
 | SBT | 1.8.3 |
 | ocelot-brain | pinned submodule at `bec1cc6b1e9e588692f753e9c617063c74967fed` |
 
-The implementation plan begins by adding checked SBT wrapper scripts and proving a clean build against the pinned dependency.
+## Build and verification
+
+Initialize the pinned dependency after cloning:
+
+```bash
+git submodule update --init --recursive
+```
+
+Run the equivalent canonical verification entrypoint for the current platform:
+
+```text
+scripts/verify          # POSIX shell or Git Bash
+scripts\verify.cmd      # Windows Command Prompt or PowerShell
+```
+
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke test.
 
 ## License
 

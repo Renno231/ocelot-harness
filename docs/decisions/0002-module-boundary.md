@@ -1,6 +1,6 @@
 # ADR 0002: Two first-party modules with a concrete brain-backed core
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Ocelot Harness maintainers
 
 ## Context

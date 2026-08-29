@@ -1,6 +1,6 @@
 # ADR 0003: HOCON project manifests and transport-neutral JSON-RPC control
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Ocelot Harness maintainers
 
 ## Context

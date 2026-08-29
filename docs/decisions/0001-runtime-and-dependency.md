@@ -1,6 +1,6 @@
 # ADR 0001: Scala runtime and pinned ocelot-brain source dependency
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Ocelot Harness maintainers
 
 ## Context
@@ -27,7 +27,7 @@ Ocelot Harness must call ocelot-brain entity, workspace, input, event, and persi
 
 ## Verification
 
-The dependency-resolution slice must prove:
+Slice 0 proved:
 
 ```text
 fresh clone with submodules
@@ -35,3 +35,5 @@ fresh clone with submodules
 → harness-core compiles against pinned brain
 → minimal process initializes and shuts down brain cleanly
 ```
+
+The pinned source build records the exact brain runtime dependencies. The native boundary resolved and loaded OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1` on Windows and Linux Java 8. First-party Slice 0 code adds only ScalaTest `3.2.19` for executable dependency and lifecycle proofs; feature libraries will be declared when their first caller is implemented.
