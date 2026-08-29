@@ -3,6 +3,7 @@ package ocelot.harness.core.workspace
 import java.nio.file.Path
 
 import ocelot.harness.core.HarnessError
+import ocelot.harness.core.artifact.{ArtifactDescription, ScreenArtifactRequest}
 import ocelot.harness.core.project.{
   CardKind,
   ComputerId,
@@ -84,6 +85,13 @@ trait HarnessSession extends AutoCloseable {
   def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def run(request: RunRequest): Either[HarnessError, RunResult]
   def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
+  def captureScreen(
+      id: ScreenId,
+      request: ScreenArtifactRequest
+  ): Either[HarnessError, ArtifactDescription]
   def send(id: ScreenId, input: UserInput): Either[HarnessError, InputResult]
   def recentEvents(): Either[HarnessError, EventSnapshot]
+  def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription]
+  def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription]
+  def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
 }

@@ -1,8 +1,11 @@
 package ocelot.harness.core.runtime
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
+import java.security.MessageDigest
 import java.util.concurrent.{Executors, TimeUnit}
+import java.util.zip.ZipInputStream
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -11,6 +14,7 @@ import org.scalatest.EitherValues
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import ocelot.harness.core.artifact.{ScreenArtifactFormat, ScreenArtifactRequest}
 import ocelot.harness.core.project.{ComputerId, ScreenId}
 import ocelot.harness.core.workspace._
 
@@ -68,6 +72,9 @@ final class InteractiveExecutionSpec extends AnyFunSuite with Matchers {
         exited shouldBe true
         process.exitValue() shouldBe 0
         stdout should include("INTERACTIVE_READY=true")
+        stdout should include("INTERACTIVE_PNG=true")
+        stdout should include("INTERACTIVE_SNAPSHOT=true")
+        stdout should include("INTERACTIVE_RESTORE_NON_DESTRUCTIVE=true")
         stdout should include("INTERACTIVE_TOUCH=true")
         stdout should include("INTERACTIVE_PASTE=true")
         stdout should include("INTERACTIVE_DRAG=true")
@@ -76,6 +83,7 @@ final class InteractiveExecutionSpec extends AnyFunSuite with Matchers {
         stdout should include("INTERACTIVE_BOUNDS=true")
         stdout should include("INTERACTIVE_IMMUTABLE=true")
         stdout should include("INTERACTIVE_EVENTS_BOUNDED=true")
+        stdout should include("INTERACTIVE_DIAGNOSTICS=true")
         stdout should include("INTERACTIVE_CLEANUP=true")
       }
     } finally deleteRecursively(workDirectory)
@@ -144,6 +152,74 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
       ready.stopReason shouldBe RunStopReason.ConditionSatisfied
       Console.out.println("INTERACTIVE_READY=true")
 
+      val textArtifact = session
+        .captureScreen(
+          screenId,
+          ScreenArtifactRequest("screens/main.txt", ScreenArtifactFormat.Text)
+        )
+        .value
+      textArtifact.mediaType shouldBe "text/plain; charset=utf-8"
+      readText(projectRoot.resolve("artifacts/screens/main.txt")) should include("READY")
+      val cellsArtifact = session
+        .captureScreen(
+          screenId,
+          ScreenArtifactRequest("screens/main.cells.json", ScreenArtifactFormat.CellsJson)
+        )
+        .value
+      cellsArtifact.mediaType shouldBe "application/json"
+      readText(projectRoot.resolve("artifacts/screens/main.cells.json")) should include(
+        "\"width\":40"
+      )
+      val png = session
+        .captureScreen(
+          screenId,
+          ScreenArtifactRequest("screens/main.png", ScreenArtifactFormat.Png)
+        )
+        .value
+      png.mediaType shouldBe "image/png"
+      png.size should be > 0L
+      png.sha256 should fullyMatch regex "[0-9a-f]{64}"
+      Files.isRegularFile(projectRoot.resolve("artifacts/screens/main.png")) shouldBe true
+      Console.out.println("INTERACTIVE_PNG=true")
+
+      val readyDescription = session.describe()
+      val readyScreen = session.readScreen(screenId).value
+      val readyName = SnapshotName.parse("ready").value
+      val incompatibleName = SnapshotName.parse("incompatible").value
+      val corruptName = SnapshotName.parse("corrupt").value
+      val copiedName = SnapshotName.parse("copied").value
+      val tooSmallName = SnapshotName.parse("too-small").value
+      val readySnapshot = session.saveSnapshot(SnapshotRequest(readyName)).value
+      readySnapshot.hostDisks shouldBe HostDiskSnapshotPolicy.ReferenceOnly
+      readySnapshot.captureTick shouldBe readyScreen.captureTick
+      readySnapshot.sha256 should fullyMatch regex "[0-9a-f]{64}"
+      session
+        .saveSnapshot(SnapshotRequest(tooSmallName, maxBytes = readySnapshot.size))
+        .left
+        .value
+        .code shouldBe "snapshot_limit_exceeded"
+      Files.exists(projectRoot.resolve("snapshots").resolve("too-small")) shouldBe false
+      session.saveSnapshot(SnapshotRequest(incompatibleName)).value
+      session.saveSnapshot(SnapshotRequest(corruptName)).value
+      val copiedSnapshot = session
+        .saveSnapshot(
+          SnapshotRequest(copiedName, hostDisks = HostDiskSnapshotPolicy.Copy)
+        )
+        .value
+      copiedSnapshot.hostDisks shouldBe HostDiskSnapshotPolicy.Copy
+      copiedSnapshot.copiedDiskBytes should be > 0L
+      Files.isRegularFile(
+        projectRoot
+          .resolve("snapshots")
+          .resolve("copied")
+          .resolve("disks")
+          .resolve("main")
+          .resolve("project")
+          .resolve("computer")
+          .resolve("main.lua")
+      ) shouldBe true
+      Console.out.println("INTERACTIVE_SNAPSHOT=true")
+
       session
         .run(
           RunRequest(
@@ -179,6 +255,34 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
       runUntil(session, ScreenContains(screenId, "TOUCHED")).stopReason shouldBe
         RunStopReason.ConditionSatisfied
       Console.out.println("INTERACTIVE_TOUCH=true")
+
+      val incompatibleMetadata = projectRoot
+        .resolve("snapshots")
+        .resolve("incompatible")
+        .resolve("metadata.conf")
+      Files.write(
+        incompatibleMetadata,
+        readText(incompatibleMetadata)
+          .replace("formatVersion=1", "formatVersion=99")
+          .getBytes(StandardCharsets.UTF_8)
+      )
+      val incompatibleError = session.loadSnapshot(incompatibleName).left.value
+      withClue(incompatibleError.message) {
+        incompatibleError.code shouldBe "snapshot_incompatible"
+      }
+      session.readScreen(screenId).value.text should include("TOUCHED")
+      Files.write(
+        projectRoot.resolve("snapshots").resolve("corrupt").resolve("workspace.nbt.gz"),
+        Array[Byte](1, 2, 3)
+      )
+      session.loadSnapshot(corruptName).left.value.code shouldBe "snapshot_corrupt"
+      session.readScreen(screenId).value.text should include("TOUCHED")
+      session.loadSnapshot(readyName).value shouldBe readyDescription
+      val restored = session.readScreen(screenId).value
+      restored.text should include("READY")
+      restored.text should not include "TOUCHED"
+      restored.captureTick shouldBe readyScreen.captureTick
+      Console.out.println("INTERACTIVE_RESTORE_NON_DESTRUCTIVE=true")
 
       session.send(screenId, UserInput.Paste("PASTED-VALUE")).value.eventsSent shouldBe 1
       runUntil(session, ScreenContains(screenId, "PASTED-VALUE")).stopReason shouldBe
@@ -289,6 +393,69 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
       events.droppedCount should be > 0L
       Console.out.println("INTERACTIVE_EVENTS_BOUNDED=true")
 
+      val diagnostics = session
+        .diagnostics(
+          DiagnosticRequest(
+            "diagnostics/interactive.zip",
+            failure = Some(
+              DiagnosticFailure(
+                "probe_failure",
+                s"probe failed at $projectRoot",
+                Some(s"trace from $projectRoot")
+              )
+            )
+          )
+        )
+        .value
+      diagnostics.artifact.mediaType shouldBe "application/zip"
+      diagnostics.artifact.size should be > 0L
+      diagnostics.artifact.size should be <= 16L * 1024L * 1024L
+      Vector(
+        "manifest.conf",
+        "versions.txt",
+        "runtime.txt",
+        "topology.txt",
+        "events.txt",
+        "timeline.txt",
+        "error.txt",
+        "screens/main.txt",
+        "screens/main.cells.json",
+        "screens/main.png",
+        "checksums.txt"
+      ).foreach(entry => diagnostics.entries should contain(entry))
+      val diagnosticBytes = Files.readAllBytes(
+        projectRoot.resolve("artifacts").resolve("diagnostics").resolve("interactive.zip")
+      )
+      val diagnosticEntries = readZip(diagnosticBytes)
+      val diagnosticManifest = new String(
+        diagnosticEntries("manifest.conf"),
+        StandardCharsets.UTF_8
+      )
+      diagnosticManifest should not include projectRoot.toString
+      diagnosticManifest should include("<redacted>")
+      val diagnosticError = new String(
+        diagnosticEntries("error.txt"),
+        StandardCharsets.UTF_8
+      )
+      diagnosticError should include("code=probe_failure")
+      diagnosticError should include("<project-root>")
+      diagnosticError should not include projectRoot.toString
+      val declaredChecksums = new String(
+        diagnosticEntries("checksums.txt"),
+        StandardCharsets.UTF_8
+      ).linesIterator
+        .filter(_.nonEmpty)
+        .map { line =>
+          val separator = line.indexOf("  ")
+          require(separator > 0, s"invalid checksum declaration: $line")
+          line.substring(separator + 2) -> line.substring(0, separator)
+        }
+        .toMap
+      diagnosticEntries.filterNot(_._1 == "checksums.txt").foreach { case (name, bytes) =>
+        declaredChecksums(name) shouldBe sha256(bytes)
+      }
+      Console.out.println("INTERACTIVE_DIAGNOSTICS=true")
+
       session.stopMachine(computerId).value.state shouldBe MachineState.Stopped
     } finally {
       session.close()
@@ -311,4 +478,28 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
 
   private def readText(path: Path): String =
     new String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+
+  private def readZip(bytes: Array[Byte]): Map[String, Array[Byte]] = {
+    val input = new ZipInputStream(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)
+    val entries = Map.newBuilder[String, Array[Byte]]
+    try {
+      var entry = input.getNextEntry
+      while (entry != null) {
+        val output = new ByteArrayOutputStream()
+        val buffer = new Array[Byte](8192)
+        var read = input.read(buffer)
+        while (read >= 0) {
+          if (read > 0) output.write(buffer, 0, read)
+          read = input.read(buffer)
+        }
+        entries += entry.getName -> output.toByteArray
+        input.closeEntry()
+        entry = input.getNextEntry
+      }
+    } finally input.close()
+    entries.result()
+  }
+
+  private def sha256(bytes: Array[Byte]): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).map(value => f"${value & 0xff}%02x").mkString
 }

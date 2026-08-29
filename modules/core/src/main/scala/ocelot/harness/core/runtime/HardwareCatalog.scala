@@ -6,6 +6,7 @@ import scala.util.control.NonFatal
 import totoro.ocelot.brain.entity.{
   CPU,
   Case => BrainCase,
+  EEPROM,
   GraphicsCard,
   HDDManaged,
   Keyboard,
@@ -169,6 +170,194 @@ private[runtime] object HardwareCatalog {
         }
         throw error
     }
+  }
+
+  def restore(
+      project: ValidatedProject,
+      workspace: Workspace,
+      identity: SnapshotIdentity
+  ): ConstructedWorkspace = {
+    def requiredIdentity(values: Map[String, String], kind: String, id: String): String =
+      values.getOrElse(
+        id,
+        throw new IllegalArgumentException(s"snapshot is missing $kind identity: $id")
+      )
+
+    def requiredEntity[T](address: String, kind: String)(select: PartialFunction[Entity, T]): T =
+      workspace
+        .entityByAddress(address)
+        .collect(select)
+        .getOrElse(
+          throw new IllegalArgumentException(s"snapshot $kind entity is missing: $address")
+        )
+
+    def inventoryEntity[T <: Environment](
+        computer: BrainCase,
+        slot: Int,
+        role: String
+    )(select: PartialFunction[Entity, T]): T =
+      computer.inventory(slot).get.collect(select).getOrElse {
+        val available = computer.inventory.iterator.map(_.index).toVector.sorted.mkString(",")
+        throw new IllegalArgumentException(
+          s"snapshot computer has invalid or missing $role in slot $slot; available slots: $available"
+        )
+      }
+
+    val expectedComputerIds = project.computers.map(_.id.value).toSet
+    val expectedScreenIds = project.screens.map(_.id.value).toSet
+    val expectedKeyboardIds = project.screens.filter(_.keyboard).map(_.id.value).toSet
+    if (
+      identity.computers.keySet != expectedComputerIds ||
+      identity.screens.keySet != expectedScreenIds ||
+      identity.keyboards.keySet != expectedKeyboardIds
+    ) {
+      throw new IllegalArgumentException("snapshot logical identity set does not match the project")
+    }
+
+    val computers = project.computers.map { definition =>
+      val computerAddress = requiredIdentity(identity.computers, "computer", definition.id.value)
+      val computer = requiredEntity(computerAddress, "computer") { case value: BrainCase => value }
+      val hardware = definition.hardware
+      if (computer.tier != brainTier(definition.caseTier)) {
+        throw new IllegalArgumentException(
+          s"snapshot computer tier mismatch: ${definition.id.value}"
+        )
+      }
+      val expectedSlots =
+        Set(TierThreeSlots.Cpu, TierThreeSlots.Gpu, TierThreeSlots.Eeprom) ++
+          hardware.memory.indices.map(TierThreeSlots.FirstMemory + _) ++
+          hardware.disks.indices.map(TierThreeSlots.FirstDisk + _) ++
+          hardware.cards.indices.map(TierThreeSlots.FirstCard + _)
+      val actualSlots = computer.inventory.iterator.map(_.index).toSet
+      if (actualSlots != expectedSlots) {
+        throw new IllegalArgumentException(s"snapshot inventory mismatch: ${definition.id.value}")
+      }
+      val cpu = inventoryEntity(computer, TierThreeSlots.Cpu, "CPU") {
+        case value: CPU if value.tier == brainTier(hardware.cpuTier) => value
+      }
+      val gpu = inventoryEntity(computer, TierThreeSlots.Gpu, "GPU") {
+        case value: GraphicsCard if value.tier == brainTier(hardware.gpuTier) => value
+      }
+      val eeprom = inventoryEntity(computer, TierThreeSlots.Eeprom, "EEPROM") {
+        case value: EEPROM => value
+      }
+      val memories = hardware.memory.zipWithIndex.map { case (tier, index) =>
+        inventoryEntity(computer, TierThreeSlots.FirstMemory + index, s"memory ${index + 1}") {
+          case value: Memory if value.memoryTier == memoryTier(tier) => value
+        }
+      }
+      val disks = hardware.disks.zipWithIndex.map { case (disk, index) =>
+        val value =
+          inventoryEntity(computer, TierThreeSlots.FirstDisk + index, s"disk ${disk.id.value}") {
+            case restored: HDDManaged if restored.tier == brainTier(disk.tier) => restored
+          }
+        value.workspace = workspace
+        value.customRealPath = Some(disk.source)
+        value.fileSystem.label.setLabel(disk.label)
+        if (disk.access == DiskAccess.ReadOnly && !value.isLocked) {
+          value.setLocked("ocelot-harness-read-only")
+        }
+        DiskDescription(
+          disk.id,
+          disk.tier,
+          disk.label,
+          disk.source,
+          disk.access,
+          requiredAddress(value)
+        )
+      }
+      val cards = hardware.cards.zipWithIndex.map { case (card, index) =>
+        val value =
+          inventoryEntity(computer, TierThreeSlots.FirstCard + index, s"card ${card.kind}") {
+            case restored: NetworkCard
+                if card.tier == 1 && restored.getClass == classOf[NetworkCard] =>
+              restored
+            case restored: WirelessNetworkCard.Tier2 if card.tier == 2 => restored
+          }
+        CardDescription(card.kind, card.tier, requiredAddress(value))
+      }
+      val components =
+        Vector(ComponentDescription(ComponentRole.Cpu, "3", address(cpu))) ++
+          memories.zip(hardware.memory).map { case (memory, tier) =>
+            ComponentDescription(ComponentRole.Memory, tier.value.toString, address(memory))
+          } ++
+          Vector(
+            ComponentDescription(ComponentRole.Gpu, "3", address(gpu)),
+            ComponentDescription(ComponentRole.Eeprom, "builtin", address(eeprom))
+          )
+      definition.id -> (
+        computer,
+        ComputerDescription(
+          definition.id,
+          definition.caseTier,
+          computerAddress,
+          components,
+          disks,
+          cards
+        )
+      )
+    }
+
+    val screens = project.screens.map { definition =>
+      val screenAddress = requiredIdentity(identity.screens, "screen", definition.id.value)
+      val screen = requiredEntity(screenAddress, "screen") { case value: Screen => value }
+      if (screen.tier != brainTier(definition.tier)) {
+        throw new IllegalArgumentException(s"snapshot screen tier mismatch: ${definition.id.value}")
+      }
+      val keyboard = identity.keyboards.get(definition.id.value).map { address =>
+        requiredEntity(address, "keyboard") { case value: Keyboard => value }
+      }
+      if (definition.keyboard != keyboard.nonEmpty) {
+        throw new IllegalArgumentException(
+          s"snapshot keyboard identity mismatch: ${definition.id.value}"
+        )
+      }
+      keyboard.foreach { value =>
+        if (!screen.node.isNeighborOf(value.node)) {
+          throw new IllegalArgumentException(
+            s"snapshot keyboard connection mismatch: ${definition.id.value}"
+          )
+        }
+      }
+      definition.id -> (
+        screen,
+        keyboard,
+        ScreenDescription(
+          definition.id,
+          definition.tier,
+          definition.aspectRatio,
+          screenAddress,
+          keyboard.map(requiredAddress)
+        )
+      )
+    }
+
+    val computersById = computers.map { case (id, (computer, _)) => id -> computer }.toMap
+    val screensById = screens.map { case (id, (screen, _, _)) => id -> screen }.toMap
+    project.connections.foreach {
+      case ConnectionDefinition(
+            ConnectionEndpoint.Computer(computerId),
+            ConnectionEndpoint.Screen(screenId)
+          ) if computersById(computerId).node.isNeighborOf(screensById(screenId).node) =>
+      case connection =>
+        throw new IllegalArgumentException(s"snapshot connection mismatch: $connection")
+    }
+    val expectedEntityCount = computers.size + screens.size + identity.keyboards.size
+    if (workspace.getEntitiesIter.size != expectedEntityCount) {
+      throw new IllegalArgumentException("snapshot contains unexpected workspace entities")
+    }
+
+    ConstructedWorkspace(
+      WorkspaceDescription(
+        project.id,
+        computers.map(_._2._2),
+        screens.map(_._2._3),
+        project.connections
+      ),
+      computersById,
+      screensById,
+      screens.collect { case (id, (_, Some(keyboard), _)) => id -> keyboard }.toMap
+    )
   }
 
   private def brainTier(tier: Int): Tier.Tier = tier match {

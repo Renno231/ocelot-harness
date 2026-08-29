@@ -50,6 +50,7 @@ final class RuntimeOwner private[runtime] (
                 workspace,
                 Some(project),
                 Some(constructed),
+                lifecycle.version,
                 sessionClosed
               )
               activeSession = Some(session)
@@ -86,6 +87,7 @@ final class RuntimeOwner private[runtime] (
           new Workspace(projectRoot),
           None,
           None,
+          lifecycle.version,
           sessionClosed
         )
         activeSession = Some(session)

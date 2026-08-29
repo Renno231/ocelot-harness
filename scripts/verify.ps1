@@ -62,9 +62,13 @@ try {
             'BRAIN_NATIVE_LUA_AVAILABLE=true',
             'BRAIN_PROJECT_SESSION_OPENED',
             'BRAIN_VERTICAL_READY=true',
+            'BRAIN_VERTICAL_PNG=true',
+            'BRAIN_VERTICAL_SNAPSHOT=true',
             'BRAIN_VERTICAL_TOUCH=true',
+            'BRAIN_VERTICAL_RESTORE=true',
             'BRAIN_VERTICAL_PASTE=true',
             'BRAIN_VERTICAL_HOST_EDIT=true',
+            'BRAIN_VERTICAL_DIAGNOSTICS=true',
             'BRAIN_PROJECT_SESSION_CLOSED',
             'BRAIN_LIFECYCLE_SHUTDOWN',
             'HARNESS_NON_DAEMON_THREADS=0'

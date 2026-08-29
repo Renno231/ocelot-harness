@@ -7,6 +7,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import ocelot.harness.core.HarnessError
+import ocelot.harness.core.artifact.{ScreenArtifactFormat, ScreenArtifactRequest}
 import ocelot.harness.core.project.{ComputerId, ScreenId}
 import ocelot.harness.core.runtime.{RuntimeConfig, RuntimeOwner}
 import ocelot.harness.core.workspace._
@@ -75,9 +76,30 @@ object BrainLifecycleProbe {
     runUntil(session, ScreenContains(screenId, "READY"))
     Console.out.println("BRAIN_VERTICAL_READY=true")
 
+    val capture = valueOrThrow(
+      session.captureScreen(
+        screenId,
+        ScreenArtifactRequest("screens/packaged.png", ScreenArtifactFormat.Png)
+      ),
+      "capture screen"
+    )
+    require(capture.mediaType == "image/png" && capture.size > 0L, "screen capture is empty")
+    Console.out.println("BRAIN_VERTICAL_PNG=true")
+
+    val snapshotName = parseOrThrow(SnapshotName.parse("packaged-ready"), "snapshot name")
+    valueOrThrow(session.saveSnapshot(SnapshotRequest(snapshotName)), "save snapshot")
+    Console.out.println("BRAIN_VERTICAL_SNAPSHOT=true")
+
     valueOrThrow(session.send(screenId, UserInput.Touch(1, 1)), "touch screen")
     runUntil(session, ScreenContains(screenId, "TOUCHED"))
     Console.out.println("BRAIN_VERTICAL_TOUCH=true")
+
+    valueOrThrow(session.loadSnapshot(snapshotName), "load snapshot")
+    require(
+      valueOrThrow(session.readScreen(screenId), "read restored screen").text.contains("READY"),
+      "restored screen is missing READY"
+    )
+    Console.out.println("BRAIN_VERTICAL_RESTORE=true")
 
     valueOrThrow(session.send(screenId, UserInput.Paste("PACKAGED-SMOKE")), "paste text")
     runUntil(session, ScreenContains(screenId, "PACKAGED-SMOKE"))
@@ -92,6 +114,13 @@ object BrainLifecycleProbe {
     valueOrThrow(session.resetMachine(computerId), "reset machine")
     runUntil(session, ScreenContains(screenId, "PACKAGED-EDIT"))
     Console.out.println("BRAIN_VERTICAL_HOST_EDIT=true")
+
+    val diagnostics = valueOrThrow(
+      session.diagnostics(DiagnosticRequest("diagnostics/packaged.zip")),
+      "collect diagnostics"
+    )
+    require(diagnostics.artifact.size > 0L, "diagnostic archive is empty")
+    Console.out.println("BRAIN_VERTICAL_DIAGNOSTICS=true")
   }
 
   private def runUntil(session: HarnessSession, condition: StopCondition): Unit = {

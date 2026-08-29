@@ -13,14 +13,22 @@ import totoro.ocelot.brain.workspace.Workspace
 
 import ocelot.harness.core.HarnessError
 import ocelot.harness.core.HarnessError._
+import ocelot.harness.core.artifact.{
+  ArtifactDescription,
+  ArtifactStore,
+  DiagnosticBundleWriter,
+  ScreenArtifactRequest,
+  ScreenArtifactWriter
+}
 import ocelot.harness.core.project.{ComputerId, ScreenId, ValidatedProject}
 import ocelot.harness.core.workspace._
 
 private[runtime] final class BrainSession(
     val projectRoot: Path,
-    private val workspace: Workspace,
+    initialWorkspace: Workspace,
     private val project: Option[ValidatedProject],
-    private val constructed: Option[ConstructedWorkspace],
+    initialConstructed: Option[ConstructedWorkspace],
+    brainVersion: String,
     sessionClosed: BrainSession => Unit
 ) extends HarnessSession {
   private val closed = new AtomicBoolean(false)
@@ -28,10 +36,20 @@ private[runtime] final class BrainSession(
   private val lane = new SessionCommandLane(
     project.map(_.id.value).getOrElse("lifecycle-test")
   )
-  private val screenCapture = new ScreenCapture(workspace)
+  private var workspace = initialWorkspace
+  private var constructed = initialConstructed
+  private var screenCapture = new ScreenCapture(workspace)
+  private val artifactStore = project.map(value =>
+    new ArtifactStore(
+      value.paths.artifacts,
+      16L * 1024L * 1024L,
+      value.paths.projectRoot
+    )
+  )
   private val inputController = new InputController
   private val eventBuffer =
     project.map(value => new SessionEventBuffer(value.runtime.limits.eventBufferSize))
+  private var lastRunResult: Option[RunResult] = None
 
   def isClosed: Boolean = closed.get()
 
@@ -67,11 +85,25 @@ private[runtime] final class BrainSession(
   }
 
   override def run(request: RunRequest): Either[HarnessError, RunResult] = command {
-    validateRunRequest(request).flatMap(runValidated)
+    validateRunRequest(request).flatMap(runValidated).map { result =>
+      lastRunResult = Some(result)
+      result
+    }
   }
 
   override def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot] = command {
     screen(id).map(screenCapture.capture(id, _))
+  }
+
+  override def captureScreen(
+      id: ScreenId,
+      request: ScreenArtifactRequest
+  ): Either[HarnessError, ArtifactDescription] = command {
+    for {
+      value <- screen(id)
+      store <- artifactStore.toRight(SessionOperationFailed("artifact storage is unavailable"))
+      artifact <- ScreenArtifactWriter.write(screenCapture.capture(id, value), request, store)
+    } yield artifact
   }
 
   override def send(
@@ -98,6 +130,65 @@ private[runtime] final class BrainSession(
     Right(eventBuffer.map(_.snapshot()).getOrElse(EventSnapshot(Vector.empty, 0L)))
   }
 
+  override def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription] =
+    command {
+      for {
+        value <- project.toRight(SnapshotInvalid("snapshot storage is unavailable"))
+        topology <- constructed.toRight(SnapshotInvalid("snapshot topology is unavailable"))
+        description <- SnapshotStore.save(value, topology, workspace, brainVersion, request)
+      } yield description
+    }
+
+  override def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription] =
+    command {
+      project.toRight(SnapshotInvalid("snapshot storage is unavailable")).flatMap { value =>
+        SnapshotStore.load(value, brainVersion, name).flatMap { loaded =>
+          val candidate = new Workspace(value.paths.projectRoot)
+          try {
+            candidate.load(loaded.nbt)
+            if (candidate.getIngameTime.toLong != loaded.description.captureTick) {
+              disposeWorkspace(candidate)
+              Left(SnapshotCorrupt("workspace tick does not match snapshot metadata"))
+            } else {
+              val candidateTopology = HardwareCatalog.restore(value, candidate, loaded.identity)
+              val revisionBase =
+                screenSnapshots().valuesIterator.map(_.revision).foldLeft(0L)(math.max)
+              val previous = workspace
+              workspace = candidate
+              constructed = Some(candidateTopology)
+              screenCapture = new ScreenCapture(candidate, revisionBase)
+              lastRunResult = None
+              disposeWorkspace(previous)
+              Right(candidateTopology.description)
+            }
+          } catch {
+            case NonFatal(error) =>
+              disposeWorkspace(candidate)
+              Left(SnapshotCorrupt(errorMessage(error)))
+          }
+        }
+      }
+    }
+
+  override def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle] =
+    command {
+      for {
+        value <- project.toRight(DiagnosticFailed("diagnostics are unavailable"))
+        topology <- constructed.toRight(DiagnosticFailed("diagnostic topology is unavailable"))
+        store <- artifactStore.toRight(DiagnosticFailed("artifact storage is unavailable"))
+        bundle <- DiagnosticBundleWriter.collect(
+          value,
+          topology.description,
+          brainVersion,
+          eventBuffer.map(_.snapshot()).getOrElse(EventSnapshot(Vector.empty, 0L)),
+          screenSnapshots(),
+          lastRunResult,
+          request,
+          store
+        )
+      } yield bundle
+    }
+
   override def close(): Unit = {
     var closedNow = false
     var failure: Option[Throwable] = None
@@ -120,6 +211,17 @@ private[runtime] final class BrainSession(
     if (closedNow) sessionClosed(this)
     failure.foreach(throw _)
   }
+
+  private def disposeWorkspace(value: Workspace): Unit =
+    value.getEntitiesIter.toVector.reverse.foreach { entity =>
+      try value.remove(entity)
+      catch {
+        case NonFatal(_) =>
+      }
+    }
+
+  private def errorMessage(error: Throwable): String =
+    Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
 
   private def command[A](operation: => Either[HarnessError, A]): Either[HarnessError, A] =
     lifecycleLock.synchronized {

@@ -20,7 +20,7 @@ private final case class CapturedScreenContent(
     precisionMode: Boolean
 )
 
-private[runtime] final class ScreenCapture(workspace: Workspace) {
+private[runtime] final class ScreenCapture(workspace: Workspace, startingRevision: Long = 0L) {
   private val previous = mutable.Map.empty[ScreenId, CapturedScreenContent]
   private val revisions = mutable.Map.empty[ScreenId, Long]
 
@@ -48,7 +48,7 @@ private[runtime] final class ScreenCapture(workspace: Workspace) {
     )
     val revision = previous.get(id) match {
       case Some(existing) if existing == content => revisions(id)
-      case _                                     => revisions.getOrElse(id, 0L) + 1L
+      case _                                     => revisions.getOrElse(id, startingRevision) + 1L
     }
     previous.update(id, content)
     revisions.update(id, revision)

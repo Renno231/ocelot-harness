@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — milestones 0 through 2 complete; artifacts and recovery ready
+- **Status:** Approved — milestones 0 through 3 complete; external control plane ready
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -29,7 +29,7 @@ edit host main.lua
 | 0. Bootstrap/runtime foundation | Reproducible build and sole process-global runtime ownership | Complete |
 | 1. Project construction | Validated manifest becomes a legal live topology | Complete |
 | 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Complete |
-| 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Planned |
+| 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Complete |
 | 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Planned |
 | 5. Hardening/release | Multi-device coverage and release evidence | Planned |
 
@@ -330,7 +330,7 @@ The completed implementation exposes one brain-free `HarnessSession` surface bac
 
 ## Milestone 3 — Artifacts and recovery
 
-- **Status:** Planned
+- **Status:** Complete
 
 ### Headless screen renderer and artifact store
 
@@ -372,18 +372,20 @@ Implement atomic brain workspace snapshots with harness metadata and failure dia
 - metadata records harness, schema, protocol, and brain versions
 - incompatible metadata fails before replacing the active session
 - corrupt NBT leaves the current session intact
-- transactional replacement closes the old session only after successful restoration
+- transactional replacement disposes the old workspace only after successful restoration
 - diagnostic manifest redacts service token and policy-sensitive roots
 - diagnostic bundle is bounded and includes declared checksums
 - host disk snapshot policy is explicit: reference-only by default, copy only by request
 
 #### Acceptance
 
-The vertical fixture saves, closes, restores, and exposes the expected screen and logical topology. Failed restore is non-destructive.
+The vertical fixture saves, replaces its live workspace through restore, and exposes the expected screen and logical topology. Failed restore is non-destructive.
 
 ### Milestone acceptance
 
 The vertical fixture produces deterministic text/cell/PNG artifacts and bounded diagnostics, then saves, closes, and transactionally restores its logical topology and observed screen state.
+
+The completed implementation parses the pinned OpenComputers font into a pure headless 8×16 rasterizer, handles double-width glyphs and powered-off capture deterministically, and publishes bounded text, cells JSON, PNG, and ZIP artifacts atomically with SHA-256 metadata and symlink containment. Snapshot metadata binds the harness, protocol, manifest, brain version/commit, logical identities, tick, size, and checksum to compressed bounded NBT. Restore validates a complete candidate topology before swapping workspaces, preserves monotonic observations, rebinds managed disks to validated sources, and leaves the active workspace untouched on incompatible or corrupt input. Host disks remain referenced by default and are copied into the snapshot only when requested. Diagnostic ZIPs contain redacted manifest/runtime/topology/event/timeline/screen and failure/stack evidence with declared per-entry checksums.
 
 ## Milestone 4 — External control plane
 

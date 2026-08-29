@@ -256,7 +256,7 @@ capture tick
 ScreenRenderer.render(snapshot, RenderOptions): BufferedImage
 ```
 
-It parses the OpenComputers `font.hex` resource, renders foreground/background pixels, and requires no AWT window or OpenGL context. Pixel tests assert image dimensions and raster values. PNG encoding is an output adapter around the rendered image.
+It parses the OpenComputers `font.hex` resource into 8×16 and 16×16 glyphs, renders exact foreground/background RGB values, clips a double-width glyph safely at the final visible cell, and requires no AWT window or OpenGL context. Powered-off captures are black. Scaling is nearest-neighbor by a positive integer, and the renderer enforces a hard 16,777,216-pixel ceiling even when a caller requests a larger limit. Pixel tests assert image dimensions and raster values. Deterministic UTF-8 text, cells JSON, and PNG writers are output adapters around one immutable snapshot.
 
 ### ProtocolEndpoint
 
@@ -487,7 +487,7 @@ command timeline
 error and stack trace
 ```
 
-Artifact writes return a relative project path, byte size, media type, and SHA-256 checksum.
+Artifact writes return a relative project path, byte size, media type, and SHA-256 checksum. Each write uses a temporary sibling and atomic rename, rejects path traversal and symlink escapes, and remains subject to the service-owned 16 MiB artifact ceiling. Diagnostic ZIP limits apply to both declared uncompressed entries and the final archive.
 
 ## Persistence
 
@@ -502,10 +502,10 @@ snapshot metadata
 └─ compressed brain workspace NBT
 
 disk data
-└─ remains in configured host-backed directories or is copied by explicit snapshot policy
+└─ remains in configured host-backed directories by default; an explicit copy policy includes a bounded archival copy
 ```
 
-Snapshot loading validates version metadata and reports compatibility failures before replacing the active workspace. Replacement is transactional: construct and validate the restored session first, then swap and dispose the prior session.
+Snapshot writes have a hard 64 MiB ceiling including metadata, compressed workspace NBT, and requested disk copies. Snapshot loading validates version metadata, manifest digest, compressed size/checksum, logical identity sets, legal hardware slots and tiers, required connections, and in-game time before replacing the active workspace. Replacement is transactional: construct and validate the restored session first, rebind managed disks to the currently validated manifest sources, then swap and dispose the prior workspace. A failed metadata, NBT, or topology check disposes only the candidate and leaves the active session unchanged. Copied host disks are retained as bounded archival payloads; loading does not overwrite or silently redirect the manifest's approved live disk roots.
 
 ## Testing architecture
 

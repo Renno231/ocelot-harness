@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. The completed foundation, project-construction, and interactive-execution milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable screen observations, emulated input, and a real host-edit → boot → interact → observe loop. Three cohesive milestones remain: artifacts/recovery, the external control plane, and release hardening.
+Phase 1 architecture and implementation are approved. The completed foundation, project-construction, interactive-execution, and artifacts/recovery milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable screen observations, emulated input, deterministic captures, transactional snapshots, and bounded diagnostics. Two cohesive milestones remain: the external control plane and release hardening.
 
 Start here:
 
@@ -29,11 +29,13 @@ Start here:
 - immutable Unicode text/cell/color/palette screen snapshots
 - key, typed-text, paste, touch, drag, drop, and scroll input
 - bounded events and run-failure observations
+- atomic text, cells JSON, and deterministic headless PNG artifacts
+- compatible, bounded workspace snapshots with non-destructive transactional restore
+- checksummed diagnostic bundles with redacted project paths and disk sources
 - an isolated real-brain vertical fixture under `fixtures/vertical-spike/`
 
 ## Remaining Phase 1 capabilities
 
-- deterministic PNG artifacts, snapshots, and diagnostic bundles
 - broader multi-device and hardware-profile coverage
 - JSON-RPC over agent-owned stdio and authenticated loopback transport
 - the `ocelotctl` CLI and release hardening
@@ -64,7 +66,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain vertical smoke that boots the fixture, injects touch and paste, observes the screen, reloads a host-file edit, and shuts down without live harness threads.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain vertical smoke that boots the fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, reloads a host-file edit, emits diagnostics, and shuts down without live harness threads.
 
 ## License
 

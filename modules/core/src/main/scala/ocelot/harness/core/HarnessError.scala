@@ -67,4 +67,48 @@ object HarnessError {
   final case class SessionOperationFailed(message: String) extends HarnessError {
     override val code: String = "session_operation_failed"
   }
+
+  final case class InvalidCapture(message: String) extends HarnessError {
+    override val code: String = "invalid_capture"
+  }
+
+  final case class InvalidArtifactPath(message: String) extends HarnessError {
+    override val code: String = "invalid_artifact_path"
+  }
+
+  final case class ArtifactLimitExceeded(message: String) extends HarnessError {
+    override val code: String = "artifact_limit_exceeded"
+  }
+
+  final case class ArtifactWriteFailed(message: String) extends HarnessError {
+    override val code: String = "artifact_write_failed"
+  }
+
+  final case class SnapshotInvalid(message: String) extends HarnessError {
+    override val code: String = "snapshot_invalid"
+  }
+
+  final case class SnapshotIncompatible(message: String) extends HarnessError {
+    override val code: String = "snapshot_incompatible"
+  }
+
+  final case class SnapshotCorrupt(message: String) extends HarnessError {
+    override val code: String = "snapshot_corrupt"
+  }
+
+  final case class SnapshotLimitExceeded(message: String) extends HarnessError {
+    override val code: String = "snapshot_limit_exceeded"
+  }
+
+  final case class SnapshotWriteFailed(message: String) extends HarnessError {
+    override val code: String = "snapshot_write_failed"
+  }
+
+  final case class SnapshotReadFailed(message: String) extends HarnessError {
+    override val code: String = "snapshot_read_failed"
+  }
+
+  final case class DiagnosticFailed(message: String) extends HarnessError {
+    override val code: String = "diagnostic_failed"
+  }
 }
