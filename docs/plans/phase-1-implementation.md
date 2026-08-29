@@ -2,6 +2,7 @@
 
 - **Status:** Complete — Phase 1 milestones 0 through 5 delivered
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
+- **Successor:** [`Workspace and runtime expansion`](workspace-runtime-expansion.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
 ## Objective

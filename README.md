@@ -11,14 +11,15 @@ project manifest + host files
 
 ## Status
 
-Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux.
+Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. The approved workspace/runtime expansion adds compatible Ocelot Desktop workspace import, broader deterministic project construction, and continuous configurable simulation time.
 
 Start here:
 
 1. [`docs/ocelot-automation-feasibility.md`](docs/ocelot-automation-feasibility.md)
 2. [`docs/architecture/phase-1.md`](docs/architecture/phase-1.md)
 3. [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
-4. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+4. [`docs/plans/workspace-runtime-expansion.md`](docs/plans/workspace-runtime-expansion.md)
+5. [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Implemented capabilities
 
