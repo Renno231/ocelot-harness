@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. Slices 0 and 1 provide a reproducible Java 8/SBT build, clean pinned-brain integration, and process-global lifecycle ownership with one active empty project session. Later slices build the agent-facing control plane incrementally.
+Phase 1 architecture and implementation are approved. The completed foundation milestone provides a reproducible Java 8/SBT build, clean pinned-brain integration, and process-global lifecycle ownership with one active empty project session. Five cohesive milestones build the remaining agent-facing control plane.
 
 Start here:
 

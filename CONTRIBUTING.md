@@ -6,7 +6,7 @@ Changes must preserve the contracts in:
 
 1. [`docs/architecture/phase-1.md`](docs/architecture/phase-1.md)
 2. [`docs/decisions/`](docs/decisions/)
-3. the active approved slice in [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
+3. the active approved milestone in [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
 
 Stop and request design review when work requires changing a manifest or protocol contract, widening a public module boundary, weakening security limits, modifying the pinned brain source, or adding a new backend.
 
@@ -17,7 +17,7 @@ Stop and request design review when work requires changing a manifest or protoco
 - SBT 1.8.3
 - initialized `lib/ocelot-brain` submodule at the recorded commit
 
-Use `scripts/sbtw` or `scripts\sbtw.cmd` for targeted SBT work rather than a machine-global installation. Before completing a slice, run the platform's canonical entrypoint: `scripts/verify` on POSIX/Git Bash or `scripts\verify.cmd` on Windows.
+Use `scripts/sbtw` or `scripts\sbtw.cmd` for targeted SBT work rather than a machine-global installation. After reconciling a complete milestone, run the platform's canonical entrypoint: `scripts/verify` on POSIX/Git Bash or `scripts\verify.cmd` on Windows.
 
 ## Change discipline
 

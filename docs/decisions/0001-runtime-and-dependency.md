@@ -27,7 +27,7 @@ Ocelot Harness must call ocelot-brain entity, workspace, input, event, and persi
 
 ## Verification
 
-Slice 0 proved:
+The build foundation proved:
 
 ```text
 fresh clone with submodules
@@ -36,4 +36,4 @@ fresh clone with submodules
 → minimal process initializes and shuts down brain cleanly
 ```
 
-The pinned source build records the exact brain runtime dependencies. The native boundary resolved and loaded OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1` on Windows and Linux Java 8. First-party code declares ScalaTest `3.2.19` for tests and, from Slice 1, Typesafe Config `1.4.4` for generated restrictive brain configuration; later feature libraries are declared with their first caller.
+The pinned source build records the exact brain runtime dependencies. The native boundary resolved and loaded OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1` on Windows and Linux Java 8. First-party code declares ScalaTest `3.2.19` for tests, and the runtime foundation declares Typesafe Config `1.4.4` for generated restrictive brain configuration; later feature libraries are declared with their first caller.

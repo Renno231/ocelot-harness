@@ -204,7 +204,7 @@ The actual class is concrete and package-private where possible. Public models d
 
 The catalog owns case-tier slot counts, accepted component kinds, component-tier limits, required hardware, connection rules, and the mapping to brain inventory indexes. Manifest callers select semantic roles such as `cpu`, `memory`, `gpu`, `disk`, and `card`; they never select raw brain slot integers.
 
-The first accepted hardware profile is a tier-3 computer sufficient for the vertical spike. Tier 1, tier 2, creative, servers, racks, and additional devices are added through explicit profile tests in later slices.
+The first accepted hardware profile is a tier-3 computer sufficient for the vertical spike. Tier 1, tier 2, creative, servers, racks, and additional devices are added through explicit profile tests in the hardening milestone.
 
 ### SimulationController
 
@@ -566,7 +566,7 @@ scopt 4.1.0
 ScalaTest 3.2.19 (test)
 ```
 
-Slice 0 confirmed the toolchain, brain runtime graph, and ScalaTest version. Slice 1 declares Typesafe Config 1.4.4 directly for restrictive generated brain configuration. Remaining candidate feature versions are rechecked when their corresponding behavior is implemented.
+The foundation milestone confirmed the toolchain, brain runtime graph, and ScalaTest version, and declares Typesafe Config 1.4.4 directly for restrictive generated brain configuration. Remaining candidate feature versions are rechecked when their corresponding behavior is implemented.
 
 ## Module quality assessment
 

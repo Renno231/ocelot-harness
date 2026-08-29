@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — Slices 0 and 1 complete
+- **Status:** Approved — foundation milestone complete; project construction ready
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -22,11 +22,24 @@ edit host main.lua
 → save and restore a snapshot
 ```
 
-## Operating rules for every slice
+## Delivery milestones
+
+| Milestone | Outcome | Status |
+|---|---|---|
+| 0. Bootstrap/runtime foundation | Reproducible build and sole process-global runtime ownership | Complete |
+| 1. Project construction | Validated manifest becomes a legal live topology | Ready |
+| 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Planned |
+| 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Planned |
+| 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Planned |
+| 5. Hardening/release | Multi-device coverage and release evidence | Planned |
+
+Each milestone is one cohesive delivery unit. Its capability sections are test and acceptance checklists, not independent stop/verify/commit cycles.
+
+## Operating rules for every milestone
 
 1. Read the architecture and relevant ADRs before editing.
-2. Work one slice at a time; preserve its stated public boundary.
-3. Use test-driven development:
+2. Work one milestone at a time; preserve its stated public boundary.
+3. Use test-driven development at meaningful behavior boundaries:
    - add one failing behavior test
    - run it and record the expected failure
    - implement the smallest complete behavior
@@ -37,7 +50,7 @@ edit host main.lua
 6. Use bounded condition waits. Fixed sleeps are permitted only inside the low-level tick pacer and process-test polling helper, both with deadlines.
 7. Keep all public models free of `totoro.ocelot` types.
 8. Keep Internet Card HTTP/TCP disabled unless a test explicitly starts the service with an allow policy.
-9. Finish each slice with targeted tests, the canonical repository verification command, documentation updates, and a clean resource-leak check.
+9. Use targeted tests while implementing capability sections. After the complete milestone diff is reconciled, run the canonical repository verification command once, update documentation, and perform a clean resource-leak check.
 10. Stop for design review when implementation requires widening a public interface, changing a manifest/protocol contract, modifying the brain submodule, or weakening path/authentication policy.
 
 ## Planned repository layout
@@ -60,12 +73,14 @@ lib/ocelot-brain/
 
 `harness-core` owns all emulation policy and concurrency. `harness-app` owns protocol, transports, command-line presentation, and process lifecycle.
 
-## Slice 0 — Reproducible build and dependency proof
+## Milestone 0 — Bootstrap and runtime foundation
+
+### Reproducible build and dependency proof
 
 - **Status:** Complete
 - **Verified profiles:** Windows Temurin Java 8; clean ephemeral Linux Temurin Java 8
 
-### Deliverables
+#### Deliverables
 
 - multi-project SBT build with `harness-core`, `harness-app`, and pinned brain project reference
 - `project/build.properties` pinning SBT 1.8.3
@@ -76,13 +91,13 @@ lib/ocelot-brain/
 - Java 8 compatibility check and clear failure message
 - no production behavior beyond a dependency probe
 
-### Tests first
+#### Tests first
 
 - wrapper checksum test rejects a changed launcher payload
 - build definition test resolves the pinned brain project
 - process probe initializes and shuts down ocelot-brain once in a forked JVM
 
-### Acceptance
+#### Acceptance
 
 ```text
 fresh clone
@@ -96,18 +111,18 @@ fresh clone
 
 Do not proceed if native Lua libraries or dependency downloads cannot be reproduced on Windows and Linux. Record exact resolved dependency versions.
 
-The pinned source build is the authoritative dependency record. Slice 0 resolved its exact runtime graph from `lib/ocelot-brain/build.sbt`, including OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1`; first-party test code directly declares ScalaTest `3.2.19`. No unused future feature dependencies are carried.
+The pinned source build is the authoritative dependency record. The build foundation resolved its exact runtime graph from `lib/ocelot-brain/build.sbt`, including OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1`; first-party test code directly declares ScalaTest `3.2.19`. No unused future feature dependencies are carried.
 
-## Slice 1 — Process runtime ownership
+### Process runtime ownership
 
 - **Status:** Complete
 - **Verified profile:** Windows Temurin Java 8
 
-### Public behavior
+#### Public behavior
 
 Implement `RuntimeOwner` and session lifecycle models from the architecture.
 
-### Tests first
+#### Tests first
 
 - `RuntimeOwnerSpec`: starts Ocelot once
 - `RuntimeOwnerSpec`: rejects a second owner in the same process
@@ -115,7 +130,7 @@ Implement `RuntimeOwner` and session lifecycle models from the architecture.
 - `RuntimeOwnerSpec`: startup failure releases partial resources
 - `RuntimeOwnerProcessSpec`: orderly shutdown leaves no non-daemon harness threads
 
-### Implementation notes
+#### Implementation notes
 
 - run integration tests in a forked JVM with test parallelism disabled
 - keep the Ocelot singleton behind `RuntimeOwner`
@@ -123,15 +138,19 @@ Implement `RuntimeOwner` and session lifecycle models from the architecture.
 - register one JVM shutdown hook that delegates idempotently to the owner
 - separate stdout protocol output from stderr logging from the first executable probe
 
-### Acceptance
+#### Acceptance
 
 A process can start the brain, open and close one empty workspace, and terminate without hanging.
 
-Slice 1 added a concrete `RuntimeOwner`, core-owned first-party lifecycle errors/configuration, one-active-session enforcement, a single idempotent JVM shutdown hook, and a generated brain configuration that disables HTTP/TCP and filesystem buffering. The forked process proof requires stdout to contain only the ordered lifecycle evidence markers, keeps brain logging on stderr, closes the empty session before global shutdown, and reports no live non-daemon harness threads.
+The runtime foundation added a concrete `RuntimeOwner`, core-owned first-party lifecycle errors/configuration, one-active-session enforcement, a single idempotent JVM shutdown hook, and a generated brain configuration that disables HTTP/TCP and filesystem buffering. The forked process proof requires stdout to contain only the ordered lifecycle evidence markers, keeps brain logging on stderr, closes the empty session before global shutdown, and reports no live non-daemon harness threads.
 
-## Slice 2 — Project manifest, IDs, and host-path policy
+## Milestone 1 — Project construction
 
-### Public behavior
+- **Status:** Ready
+
+### Project manifest, IDs, and host-path policy
+
+#### Public behavior
 
 Implement:
 
@@ -142,7 +161,7 @@ Implement:
 - service-level allowed roots
 - HOCON schema version 1 parsing
 
-### Tests first
+#### Tests first
 
 - valid minimum manifest expands defaults
 - invalid manifests report multiple independent errors
@@ -156,13 +175,13 @@ Implement:
 - a manifest cannot grant itself a broader root
 - Internet access requires both service policy and manifest request
 
-### Acceptance
+#### Acceptance
 
 Manifest validation is pure, deterministic, and performs no brain construction or artifact writes. Error ordering is stable.
 
-## Slice 3 — Legal hardware catalog and workspace construction
+### Legal hardware catalog and workspace construction
 
-### Public behavior
+#### Public behavior
 
 Implement the first hardware profile:
 
@@ -177,7 +196,7 @@ Implement the first hardware profile:
 
 The manifest uses semantic roles. Brain inventory indexes remain private.
 
-### Tests first
+#### Tests first
 
 - valid tier-3 profile creates the expected logical inventory description
 - missing CPU, memory, GPU, or EEPROM reports a profile violation
@@ -189,17 +208,25 @@ The manifest uses semantic roles. Brain inventory indexes remain private.
 - construction failure disposes all already-created entities
 - runtime addresses map back to stable logical IDs
 
-### Integration acceptance
+#### Integration acceptance
 
 `HarnessSession.describe()` returns a complete logical topology for one computer and screen. No raw brain class name or numeric slot appears in the public model.
 
-### Scope boundary
+#### Scope boundary
 
-Tier 1, tier 2, creative, servers, racks, and broad addon coverage are added only through new profile tests in Slice 10. The initial vertical path must remain small enough to diagnose.
+Tier 1, tier 2, creative, servers, racks, and broad addon coverage are added only through new profile tests in the hardening milestone. The initial vertical path must remain small enough to diagnose.
 
-## Slice 4 — Serialized simulation, machine state, and events
+### Milestone acceptance
 
-### Public behavior
+A versioned manifest resolves only policy-approved canonical paths, constructs one legal tier-3 computer and screen, and exposes a complete logical topology without public brain types, raw inventory indexes, or generated-address identity.
+
+## Milestone 2 — Interactive execution
+
+- **Status:** Planned
+
+### Serialized simulation, machine state, and events
+
+#### Public behavior
 
 Implement:
 
@@ -210,7 +237,7 @@ Implement:
 - bounded EventBus collection and subscription cleanup
 - cancellation
 
-### Tests first
+#### Tests first
 
 - concurrent callers are linearized
 - machine lifecycle reports typed resulting state
@@ -222,13 +249,13 @@ Implement:
 - a tight accelerated loop still yields to brain worker execution
 - stop reason, elapsed ticks, and final revisions are consistent
 
-### Acceptance
+#### Acceptance
 
 A minimal EEPROM writes a marker to an attached screen, and `run` reaches it without an unbounded sleep. The result states explicitly that tick control is condition-driven, not bit-for-bit deterministic.
 
-## Slice 5 — Immutable screen observations and emulated input
+### Immutable screen observations and emulated input
 
-### Public behavior
+#### Public behavior
 
 Implement synchronized `ScreenSnapshot` capture and:
 
@@ -241,7 +268,7 @@ Implement synchronized `ScreenSnapshot` capture and:
 - one-based public coordinates
 - default `agent` user
 
-### Tests first
+#### Tests first
 
 - snapshot is immutable after the brain buffer changes
 - text preserves Unicode and screen dimensions
@@ -254,13 +281,13 @@ Implement synchronized `ScreenSnapshot` capture and:
 - paste preserves Ocelot clipboard splitting and limits
 - input and tick operations cannot interleave inconsistently
 
-### Acceptance
+#### Acceptance
 
 The spike Lua program displays `READY`, then changes to `TOUCHED` after touch and displays pasted text after clipboard input.
 
-## Slice 6 — Host-backed development loop vertical spike
+### Host-backed development loop vertical spike
 
-### Fixture
+#### Fixture
 
 Create `fixtures/vertical-spike/` containing:
 
@@ -273,7 +300,7 @@ expected/
 
 The EEPROM loader locates the filesystem labeled `project`, loads `/main.lua`, reports boot errors on the screen, and executes it. The GUI fixture reacts to touch and clipboard signals.
 
-### Tests first
+#### Tests first
 
 - manifest loads and constructs the fixture
 - first boot reaches `READY` within explicit budgets
@@ -283,13 +310,21 @@ The EEPROM loader locates the filesystem labeled `project`, loads `/main.lua`, r
 - two successive tests receive isolated temporary fixture copies
 - failure captures screen text, events, machine state, and timeline
 
-### Acceptance
+#### Acceptance
 
-This slice satisfies the Phase 1 technical go/no-go gate. Stop and review evidence before expanding the interface if the real-brain loop is unreliable.
+This vertical-spike capability satisfies the Phase 1 technical go/no-go gate. Stop and review evidence before expanding the interface if the real-brain loop is unreliable.
 
-## Slice 7 — Headless screen renderer and artifact store
+### Milestone acceptance
 
-### Public behavior
+A host-file edit can be booted, driven through bounded condition waits, touched and pasted into through emulated input, observed through immutable screen state, reset, and rerun against real ocelot-brain with bounded failure diagnostics.
+
+## Milestone 3 — Artifacts and recovery
+
+- **Status:** Planned
+
+### Headless screen renderer and artifact store
+
+#### Public behavior
 
 Implement:
 
@@ -300,7 +335,7 @@ Implement:
 - SHA-256, media type, size, and relative-path metadata
 - capture limits
 
-### Tests first
+#### Tests first
 
 - known glyph rows render exact pixels
 - foreground/background and palette colors render exactly
@@ -311,17 +346,17 @@ Implement:
 - writes are atomic and checksummed
 - golden PNG test is deterministic on Java 8 Windows/Linux
 
-### Acceptance
+#### Acceptance
 
 The vertical fixture produces text, cells JSON, and a reproducible PNG without creating an AWT window or OpenGL context.
 
-## Slice 8 — Snapshots and diagnostic bundles
+### Snapshots and diagnostic bundles
 
-### Public behavior
+#### Public behavior
 
 Implement atomic brain workspace snapshots with harness metadata and failure diagnostic bundles.
 
-### Tests first
+#### Tests first
 
 - save/restore preserves machine, screen, identity mapping, and in-game time
 - metadata records harness, schema, protocol, and brain versions
@@ -332,13 +367,21 @@ Implement atomic brain workspace snapshots with harness metadata and failure dia
 - diagnostic bundle is bounded and includes declared checksums
 - host disk snapshot policy is explicit: reference-only by default, copy only by request
 
-### Acceptance
+#### Acceptance
 
 The vertical fixture saves, closes, restores, and exposes the expected screen and logical topology. Failed restore is non-destructive.
 
-## Slice 9 — Versioned JSON-RPC and agent-owned stdio
+### Milestone acceptance
 
-### Public behavior
+The vertical fixture produces deterministic text/cell/PNG artifacts and bounded diagnostics, then saves, closes, and transactionally restores its logical topology and observed screen state.
+
+## Milestone 4 — External control plane
+
+- **Status:** Planned
+
+### Versioned JSON-RPC and agent-owned stdio
+
+#### Public behavior
 
 Implement protocol major version 1, transport-neutral dispatch, NDJSON framing, stdio service mode, and artifact references.
 
@@ -359,7 +402,7 @@ diagnostics.collect
 service.shutdown
 ```
 
-### Tests first
+#### Tests first
 
 - JSON-RPC success, notification, parse error, invalid request, method not found, and domain error contracts
 - protocol major mismatch fails during handshake
@@ -370,13 +413,13 @@ service.shutdown
 - EOF closes session and process cleanly
 - large artifacts return metadata rather than inline bytes
 
-### Process acceptance
+#### Process acceptance
 
 A test launches the fat JAR with `serve --stdio`, drives the complete vertical fixture over stdin/stdout, validates diagnostics, sends shutdown, and observes exit code 0.
 
-## Slice 10 — Authenticated loopback service and CLI
+### Authenticated loopback service and CLI
 
-### Public behavior
+#### Public behavior
 
 Implement:
 
@@ -388,7 +431,7 @@ Implement:
 - `ocelotctl` commands corresponding to protocol methods
 - machine-readable `--json` and concise human output
 
-### Tests first
+#### Tests first
 
 - service binds only `127.0.0.1`
 - unauthenticated and wrong-token clients receive no command access
@@ -400,7 +443,7 @@ Implement:
 - every CLI failure maps to a stable nonzero exit category
 - paths containing spaces work on Windows
 
-### End-to-end acceptance
+#### End-to-end acceptance
 
 ```text
 ocelot-harnessd up --project fixtures/vertical-spike
@@ -413,7 +456,13 @@ ocelot-harnessd down
 
 All commands address the same running session.
 
-## Slice 11 — Multi-device coverage and release hardening
+### Milestone acceptance
+
+Agent-owned stdio and an authenticated loopback service expose the same versioned transport-neutral control contract; the CLI drives one persistent project session without protocol/log stream contamination.
+
+## Milestone 5 — Multi-device coverage and release hardening
+
+- **Status:** Planned
 
 ### Scope
 
@@ -448,7 +497,7 @@ Hosted CI configuration is added when the repository host is selected. It invoke
 
 ## Canonical verification target
 
-After Slice 0, these commands are the required interfaces:
+After the foundation milestone, these commands are the required interfaces:
 
 ```text
 scripts/verify          # POSIX/Git Bash
@@ -468,15 +517,15 @@ submodule pin check
 → packaged vertical smoke test
 ```
 
-A targeted developer command may run less, but no slice is complete until the canonical verification target passes from a clean state.
+A targeted developer command may run less, but no milestone is complete until the canonical verification target passes from a clean state.
 
 ## Review gates
 
 Stop and request maintainer review at these points:
 
-1. before Slice 0 implementation
-2. after Slice 0 if dependency/native setup differs from this plan
-3. after Slice 6 vertical go/no-go evidence
+1. before foundation implementation
+2. after the foundation milestone if dependency/native setup differs from this plan
+3. after the interactive-execution vertical go/no-go evidence
 4. before publishing protocol version 1
 5. before enabling Internet Card access or external host roots
 6. before modifying or forking ocelot-brain
