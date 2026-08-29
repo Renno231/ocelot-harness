@@ -1,0 +1,3 @@
+[submodule "lib/ocelot-brain"]
+	path = lib/ocelot-brain
+	url = https://gitlab.com/cc-ru/ocelot/ocelot-brain.git

@@ -1,0 +1,23 @@
+# SBT / Scala
+**/target/
+project/project/
+.bsp/
+.metals/
+.scala-build/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# Ocelot Harness runtime state and generated artifacts
+.ocelot-harness/
+*.log
+
+# Platform files
+.DS_Store
+Thumbs.db
+Desktop.ini
