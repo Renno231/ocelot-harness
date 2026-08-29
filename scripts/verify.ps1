@@ -39,6 +39,14 @@ try {
     if (-not (Test-Path -LiteralPath $assemblyJar -PathType Leaf)) {
         throw "Expected assembly was not created at $assemblyJar"
     }
+    $jarEntries = @(& jar tf $assemblyJar)
+    if ($LASTEXITCODE -ne 0 -or
+        $jarEntries -notcontains 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md' -or
+        $jarEntries -notcontains 'META-INF/ocelot-harness/sbom.cdx.json' -or
+        $jarEntries -notcontains 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt') {
+        throw 'Packaged release metadata or license notices are incomplete'
+    }
+    Write-Host 'PASS: packaged release metadata and license notices'
 
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
@@ -98,7 +106,11 @@ try {
                 throw "Invalid packaged protocol response: $($frame | ConvertTo-Json -Compress)"
             }
         }
-        if (($frames | Where-Object { $_.id -eq 2 }).result.projectId -ne 'vertical-spike' -or
+        $expectedHarnessCommit = (& git rev-parse HEAD).Trim()
+        $versionFrame = ($frames | Where-Object { $_.id -eq 1 }).result
+        if ($versionFrame.harnessCommit -ne $expectedHarnessCommit -or
+            $versionFrame.brainCommit -ne 'bec1cc6b1e9e588692f753e9c617063c74967fed' -or
+            ($frames | Where-Object { $_.id -eq 2 }).result.projectId -ne 'vertical-spike' -or
             ($frames | Where-Object { $_.id -eq 4 }).result.stopReason.type -ne 'condition_satisfied' -or
             ($frames | Where-Object { $_.id -eq 5 }).result.relativePath -ne 'screens/packaged-protocol.png' -or
             ($frames | Where-Object { $_.id -eq 12 }).result.artifact.relativePath -ne 'diagnostics/packaged-protocol.zip' -or

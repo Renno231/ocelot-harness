@@ -15,6 +15,7 @@ Ocelot Harness must call ocelot-brain entity, workspace, input, event, and persi
 - Reference the submodule as an SBT project dependency.
 - Keep the pinned upstream source unmodified.
 - Record every future brain update as an explicit dependency-change pull request with integration verification evidence.
+- Override vulnerable transitive libraries at the harness build boundary when a compatible fixed release is available and the pinned brain source need not change.
 
 ## Consequences
 
@@ -36,4 +37,4 @@ fresh clone with submodules
 → minimal process initializes and shuts down brain cleanly
 ```
 
-The pinned source build records the exact brain runtime dependencies. The native boundary resolved and loaded OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1` on Windows and Linux Java 8. First-party code declares ScalaTest `3.2.19` for tests, and the runtime foundation declares Typesafe Config `1.4.4` for generated restrictive brain configuration; later feature libraries are declared with their first caller.
+The pinned source build records the exact brain runtime dependencies. The native boundary resolved and loaded OC-LuaJ `20220907.1`, OC-JNLua `20230530.0`, and OC-JNLua-Natives `20220928.1` on Windows and Linux Java 8. First-party code declares ScalaTest `3.2.19` for tests, Typesafe Config `1.4.4` for generated restrictive brain configuration, and ujson `3.3.1` for protocol encoding. Release hardening overrides the brain graph's Log4j API/Core `2.25.1` resolution with Java-8-compatible `2.25.5`; exact-version OSV verification cleared the five recorded moderate advisories without changing the submodule.

@@ -27,6 +27,10 @@ if [ ! -f "$assembly_jar" ]; then
   printf 'ERROR: expected assembly was not created at %s\n' "$assembly_jar" >&2
   exit 1
 fi
+jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md'
+jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/sbom.cdx.json'
+jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt'
+printf '%s\n' 'PASS: packaged release metadata and license notices'
 
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
@@ -62,7 +66,10 @@ if grep -Fq '"error"' "$protocol_output"; then
   exit 1
 fi
 awk 'index($0, "{\"jsonrpc\":\"2.0\"") != 1 { exit 1 }' "$protocol_output"
+expected_harness_commit=$(git rev-parse HEAD)
 grep -Fq '"protocolMajor":1' "$protocol_output"
+grep -Fq "\"harnessCommit\":\"$expected_harness_commit\"" "$protocol_output"
+grep -Fq '"brainCommit":"bec1cc6b1e9e588692f753e9c617063c74967fed"' "$protocol_output"
 grep -Fq '"projectId":"vertical-spike"' "$protocol_output"
 grep -Fq '"type":"condition_satisfied"' "$protocol_output"
 grep -Fq '"relativePath":"screens/packaged-protocol.png"' "$protocol_output"

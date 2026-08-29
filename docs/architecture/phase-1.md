@@ -205,7 +205,7 @@ The actual class is concrete and package-private where possible. Public models d
 
 The catalog owns case-tier slot counts, accepted component kinds, component-tier limits, required hardware, connection rules, and the mapping to brain inventory indexes. Manifest callers select semantic roles such as `cpu`, `memory`, `gpu`, `disk`, and `card`; they never select raw brain slot integers.
 
-The first accepted hardware profile is a tier-3 computer sufficient for the vertical spike. Tier 1, tier 2, creative, servers, racks, and additional devices are added through explicit profile tests in the hardening milestone.
+The accepted Phase 1 profiles cover tier-1, tier-2, and tier-3 computers and screens, with case-specific CPU, GPU, memory, disk, and card limits. Creative hardware, servers, racks, and additional entity kinds require separate profile approval.
 
 ### SimulationController
 
@@ -454,7 +454,7 @@ Each error contains a stable code, concise message, relevant logical IDs/paths, 
 - authenticate loopback clients with a random per-run token
 - disable Internet Card HTTP/TCP by default
 - canonicalize and constrain host filesystem access
-- bound event buffers, command queues, ticks, wall time, capture rate, and artifact size
+- bound computers, screens, connections, managed disks, event buffers, command queues, ticks, wall time, capture rate, and artifact size
 - reject manifest-selected arbitrary JVM classes, reflection targets, or brain entity class names
 - never deserialize Java objects from clients
 - treat emulated code as untrusted: Ocelot's computer timeout remains enabled
@@ -553,7 +553,7 @@ Every step has tick and wall-clock limits. A failure produces the diagnostic bun
 
 ## Build and dependency policy
 
-- pin Java baseline, Scala, SBT, plugins, direct libraries, and the brain submodule commit
+- pin Java baseline, Scala, SBT, plugins, direct libraries, security overrides, and the brain submodule commit
 - use a checked download of the SBT launcher through repository wrapper scripts; do not commit the launcher binary
 - declare each used library directly when its first caller is added, even when it is available transitively
 - keep ocelot-brain unmodified in Phase 1; carry any necessary patch as a documented commit in a dedicated fork only after approval

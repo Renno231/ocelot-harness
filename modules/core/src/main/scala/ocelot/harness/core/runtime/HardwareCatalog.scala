@@ -31,7 +31,7 @@ private[runtime] final case class ConstructedWorkspace(
 )
 
 private[runtime] object HardwareCatalog {
-  private object TierThreeSlots {
+  private object CaseSlots {
     val Gpu = 0
     val FirstCard = 1
     val FirstMemory = 3
@@ -50,20 +50,20 @@ private[runtime] object HardwareCatalog {
 
     try {
       val constructedComputers = project.computers.map { definition =>
-        val computer = add(new BrainCase(Tier.Three))
+        val computer = add(new BrainCase(brainTier(definition.caseTier)))
         val hardware = definition.hardware
 
-        val cpu = new CPU(Tier.Three)
-        val gpu = new GraphicsCard(Tier.Three)
+        val cpu = new CPU(brainTier(hardware.cpuTier))
+        val gpu = new GraphicsCard(brainTier(hardware.gpuTier))
         val memories = hardware.memory.map(tier => new Memory(memoryTier(tier)))
         val eeprom = Loot.LuaBiosEEPROM.create()
 
-        computer.inventory(TierThreeSlots.Cpu) = cpu
-        computer.inventory(TierThreeSlots.Gpu) = gpu
+        computer.inventory(CaseSlots.Cpu) = cpu
+        computer.inventory(CaseSlots.Gpu) = gpu
         memories.zipWithIndex.foreach { case (memory, index) =>
-          computer.inventory(TierThreeSlots.FirstMemory + index) = memory
+          computer.inventory(CaseSlots.FirstMemory + index) = memory
         }
-        computer.inventory(TierThreeSlots.Eeprom) = eeprom
+        computer.inventory(CaseSlots.Eeprom) = eeprom
 
         val disks = hardware.disks.zipWithIndex.map { case (diskDefinition, index) =>
           val disk = new HDDManaged(brainTier(diskDefinition.tier))
@@ -73,25 +73,25 @@ private[runtime] object HardwareCatalog {
           if (diskDefinition.access == DiskAccess.ReadOnly) {
             disk.setLocked("ocelot-harness-read-only")
           }
-          computer.inventory(TierThreeSlots.FirstDisk + index) = disk
+          computer.inventory(CaseSlots.FirstDisk + index) = disk
           diskDefinition -> disk
         }
 
         val cards = hardware.cards.zipWithIndex.map { case (cardDefinition, index) =>
           val card = networkCard(cardDefinition.tier)
-          computer.inventory(TierThreeSlots.FirstCard + index) = card
+          computer.inventory(CaseSlots.FirstCard + index) = card
           cardDefinition -> card
         }
 
         val componentDescriptions =
           Vector(
-            ComponentDescription(ComponentRole.Cpu, "3", address(cpu))
+            ComponentDescription(ComponentRole.Cpu, hardware.cpuTier.toString, address(cpu))
           ) ++
             memories.zip(hardware.memory).map { case (memory, tier) =>
               ComponentDescription(ComponentRole.Memory, tier.value.toString, address(memory))
             } ++
             Vector(
-              ComponentDescription(ComponentRole.Gpu, "3", address(gpu)),
+              ComponentDescription(ComponentRole.Gpu, hardware.gpuTier.toString, address(gpu)),
               ComponentDescription(ComponentRole.Eeprom, "builtin", address(eeprom))
             )
 
@@ -121,7 +121,7 @@ private[runtime] object HardwareCatalog {
       }
 
       val screensById = project.screens.map { definition =>
-        val screen = add(new Screen(Tier.Three))
+        val screen = add(new Screen(brainTier(definition.tier)))
         val keyboard = if (definition.keyboard) Some(add(new Keyboard())) else None
         keyboard.foreach(screen.connect)
         definition.id -> (screen, keyboard)
@@ -224,31 +224,31 @@ private[runtime] object HardwareCatalog {
         )
       }
       val expectedSlots =
-        Set(TierThreeSlots.Cpu, TierThreeSlots.Gpu, TierThreeSlots.Eeprom) ++
-          hardware.memory.indices.map(TierThreeSlots.FirstMemory + _) ++
-          hardware.disks.indices.map(TierThreeSlots.FirstDisk + _) ++
-          hardware.cards.indices.map(TierThreeSlots.FirstCard + _)
+        Set(CaseSlots.Cpu, CaseSlots.Gpu, CaseSlots.Eeprom) ++
+          hardware.memory.indices.map(CaseSlots.FirstMemory + _) ++
+          hardware.disks.indices.map(CaseSlots.FirstDisk + _) ++
+          hardware.cards.indices.map(CaseSlots.FirstCard + _)
       val actualSlots = computer.inventory.iterator.map(_.index).toSet
       if (actualSlots != expectedSlots) {
         throw new IllegalArgumentException(s"snapshot inventory mismatch: ${definition.id.value}")
       }
-      val cpu = inventoryEntity(computer, TierThreeSlots.Cpu, "CPU") {
+      val cpu = inventoryEntity(computer, CaseSlots.Cpu, "CPU") {
         case value: CPU if value.tier == brainTier(hardware.cpuTier) => value
       }
-      val gpu = inventoryEntity(computer, TierThreeSlots.Gpu, "GPU") {
+      val gpu = inventoryEntity(computer, CaseSlots.Gpu, "GPU") {
         case value: GraphicsCard if value.tier == brainTier(hardware.gpuTier) => value
       }
-      val eeprom = inventoryEntity(computer, TierThreeSlots.Eeprom, "EEPROM") {
-        case value: EEPROM => value
+      val eeprom = inventoryEntity(computer, CaseSlots.Eeprom, "EEPROM") { case value: EEPROM =>
+        value
       }
       val memories = hardware.memory.zipWithIndex.map { case (tier, index) =>
-        inventoryEntity(computer, TierThreeSlots.FirstMemory + index, s"memory ${index + 1}") {
+        inventoryEntity(computer, CaseSlots.FirstMemory + index, s"memory ${index + 1}") {
           case value: Memory if value.memoryTier == memoryTier(tier) => value
         }
       }
       val disks = hardware.disks.zipWithIndex.map { case (disk, index) =>
         val value =
-          inventoryEntity(computer, TierThreeSlots.FirstDisk + index, s"disk ${disk.id.value}") {
+          inventoryEntity(computer, CaseSlots.FirstDisk + index, s"disk ${disk.id.value}") {
             case restored: HDDManaged if restored.tier == brainTier(disk.tier) => restored
           }
         value.workspace = workspace
@@ -268,7 +268,7 @@ private[runtime] object HardwareCatalog {
       }
       val cards = hardware.cards.zipWithIndex.map { case (card, index) =>
         val value =
-          inventoryEntity(computer, TierThreeSlots.FirstCard + index, s"card ${card.kind}") {
+          inventoryEntity(computer, CaseSlots.FirstCard + index, s"card ${card.kind}") {
             case restored: NetworkCard
                 if card.tier == 1 && restored.getClass == classOf[NetworkCard] =>
               restored
@@ -277,12 +277,12 @@ private[runtime] object HardwareCatalog {
         CardDescription(card.kind, card.tier, requiredAddress(value))
       }
       val components =
-        Vector(ComponentDescription(ComponentRole.Cpu, "3", address(cpu))) ++
+        Vector(ComponentDescription(ComponentRole.Cpu, hardware.cpuTier.toString, address(cpu))) ++
           memories.zip(hardware.memory).map { case (memory, tier) =>
             ComponentDescription(ComponentRole.Memory, tier.value.toString, address(memory))
           } ++
           Vector(
-            ComponentDescription(ComponentRole.Gpu, "3", address(gpu)),
+            ComponentDescription(ComponentRole.Gpu, hardware.gpuTier.toString, address(gpu)),
             ComponentDescription(ComponentRole.Eeprom, "builtin", address(eeprom))
           )
       definition.id -> (
@@ -361,12 +361,17 @@ private[runtime] object HardwareCatalog {
   }
 
   private def brainTier(tier: Int): Tier.Tier = tier match {
+    case 1     => Tier.One
     case 2     => Tier.Two
     case 3     => Tier.Three
     case other => throw new IllegalArgumentException(s"unsupported hardware tier: $other")
   }
 
   private def memoryTier(tier: MemoryTier): ExtendedTier.ExtendedTier = tier match {
+    case MemoryTier.One          => ExtendedTier.One
+    case MemoryTier.OneAndHalf   => ExtendedTier.OneHalf
+    case MemoryTier.Two          => ExtendedTier.Two
+    case MemoryTier.TwoAndHalf   => ExtendedTier.TwoHalf
     case MemoryTier.Three        => ExtendedTier.Three
     case MemoryTier.ThreeAndHalf => ExtendedTier.ThreeHalf
   }

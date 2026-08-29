@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — milestones 0 through 4 complete; release hardening ready
+- **Status:** Complete — Phase 1 milestones 0 through 5 delivered
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -31,7 +31,7 @@ edit host main.lua
 | 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Complete |
 | 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Complete |
 | 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Complete |
-| 5. Hardening/release | Multi-device coverage and release evidence | Planned |
+| 5. Hardening/release | Multi-device coverage and release evidence | Complete |
 
 Each milestone is one cohesive delivery unit. Its capability sections are test and acceptance checklists, not independent stop/verify/commit cycles.
 
@@ -476,7 +476,7 @@ Verification covers strict JSON-RPC framing and errors, safe request IDs and los
 
 ## Milestone 5 — Multi-device coverage and release hardening
 
-- **Status:** Planned
+- **Status:** Complete
 
 ### Scope
 
@@ -500,12 +500,20 @@ Add profiles and tests in value order:
 ### Release acceptance
 
 - clean-clone verification on Windows Java 8 and Linux Java 8
-- generated CLI reference and example project
-- SBOM/dependency report
+- generated CLI reference and two-computer example project
+- CycloneDX SBOM and dependency report
 - license notices include brain and retained resources
-- no critical dependency vulnerability without an explicit documented disposition
+- exact-version OSV scan has no remaining advisory
 - protocol and manifest compatibility tests pass
 - release JAR reports exact harness and brain commits
+
+### Evidence
+
+- tier-1, tier-2, and tier-3 profiles are validated and constructed against real brain entities
+- service-owned caps bound computers, screens, connections, and managed disks
+- a forked three-computer tier-1/2/3 project proves independent filesystems/screens, targeted input, multi-screen diagnostics, packet routing across configured network graph changes, resource caps at the configured maximum, and safe reopen after device removal
+- Log4j API/Core are overridden from the pinned brain resolution to 2.25.5, clearing the recorded moderate advisories without modifying the submodule
+- `docs/reference/cli.md`, `examples/two-computers/`, `docs/release/`, and `THIRD_PARTY_NOTICES.md` provide release-facing workflows and inventory
 
 Hosted CI configuration is added when the repository host is selected. It invokes the same canonical verification scripts used locally.
 

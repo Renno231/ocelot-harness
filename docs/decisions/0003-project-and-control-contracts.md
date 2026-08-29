@@ -46,6 +46,6 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 
 ## Verification
 
-Project construction parses schema version 1 into immutable typed models before creating brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, and Internet double opt-in. A forked real-brain test constructs and describes the approved tier-3 topology without exposing brain types or slot indexes.
+Project construction parses schema version 1 into immutable typed models before creating brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, Internet double opt-in, tier-1 through tier-3 legality, and service-owned topology caps. Forked real-brain tests construct and operate independent tier-2/tier-3 computers and screens without exposing brain types or slot indexes; the pure profile contract also covers tier 1.
 
 Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent CLI access, bounded shutdown, and path handling with spaces.

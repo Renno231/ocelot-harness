@@ -93,6 +93,8 @@ private[app] final class JsonRpcEndpoint(
       ujson.Obj(
         "protocolMajor" -> BuildIdentity.ProtocolVersion,
         "harnessVersion" -> BuildIdentity.HarnessVersion,
+        "harnessCommit" -> BuildIdentity.HarnessCommit,
+        "sourceDirty" -> BuildIdentity.SourceDirty,
         "brainCommit" -> BuildIdentity.BrainCommit
       )
     }

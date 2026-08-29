@@ -27,6 +27,10 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
     )
     handshake("id").num.toInt shouldBe 7
     handshake("result")("protocolMajor").num.toInt shouldBe 1
+    handshake("result")("harnessCommit").str should fullyMatch regex "[0-9a-f]{40}"
+    handshake("result").obj.keySet should contain("sourceDirty")
+    handshake("result")("brainCommit").str shouldBe
+      "bec1cc6b1e9e588692f753e9c617063c74967fed"
 
     val described = response(endpoint.handleLine(request("next", "workspace.describe")))
     described("id").str shouldBe "next"

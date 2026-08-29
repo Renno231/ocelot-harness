@@ -14,20 +14,24 @@ object OcelotCtl {
   }
 
   private[app] def run(arguments: Array[String]): Int =
-    parseGlobal(arguments.toVector).flatMap { global =>
-      parseCommand(global.arguments).map(request => global -> request)
-    } match {
-      case Left(message) => fail(AppExitCode.Usage, message)
-      case Right((global, request)) =>
-        LoopbackClient.call(global.projectRoot, request.method, request.params) match {
-          case Left(error) => fail(error.exitCode, error.message, error.harnessCode)
-          case Right(result) =>
-            if (global.json)
-              System.out.println(ujson.write(result, indent = -1, escapeUnicode = false))
-            else System.out.println(request.human(result))
-            AppExitCode.Success
-        }
-    }
+    if (arguments.toVector == Vector("--help") || arguments.toVector == Vector("help")) {
+      System.out.print(ReferenceMarkdown)
+      AppExitCode.Success
+    } else
+      parseGlobal(arguments.toVector).flatMap { global =>
+        parseCommand(global.arguments).map(request => global -> request)
+      } match {
+        case Left(message) => fail(AppExitCode.Usage, message)
+        case Right((global, request)) =>
+          LoopbackClient.call(global.projectRoot, request.method, request.params) match {
+            case Left(error) => fail(error.exitCode, error.message, error.harnessCode)
+            case Right(result) =>
+              if (global.json)
+                System.out.println(ujson.write(result, indent = -1, escapeUnicode = false))
+              else System.out.println(request.human(result))
+              AppExitCode.Success
+          }
+      }
 
   private def parseGlobal(arguments: Vector[String]): Either[String, Global] = {
     @tailrec
@@ -312,6 +316,56 @@ object OcelotCtl {
 
   private val usage =
     "usage: ocelotctl [--project <path>] [--json] <version|workspace|machine|simulation|screen|snapshot|diagnostics> ..."
+
+  private[app] val ReferenceMarkdown: String =
+    """# Ocelot Harness CLI reference
+      |
+      |Generated from `OcelotCtl.ReferenceMarkdown`. Regenerate with the packaged application by running:
+      |
+      |```text
+      |java -cp ocelot-harness.jar ocelot.harness.app.OcelotCtl --help
+      |```
+      |
+      |Global options:
+      |
+      |- `--project <path>` — project directory; defaults to the current directory
+      |- `--json` — emit the command result as compact JSON
+      |
+      |Commands:
+      |
+      |```text
+      |ocelotctl version
+      |ocelotctl workspace describe
+      |ocelotctl machine <start|stop|reset> <computer-id>
+      |ocelotctl simulation run --screen <id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
+      |ocelotctl screen read <screen-id>
+      |ocelotctl screen wait <screen-id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
+      |ocelotctl screen touch <screen-id> <x> <y> [--button <n>]
+      |ocelotctl screen drag <screen-id> <from-x> <from-y> <to-x> <to-y> [--button <n>] [--steps <n>]
+      |ocelotctl screen drop <screen-id> <x> <y> [--button <n>]
+      |ocelotctl screen scroll <screen-id> <x> <y> <delta>
+      |ocelotctl screen paste <screen-id> <text>
+      |ocelotctl screen type <screen-id> <text> [--inter-key-ticks <n>]
+      |ocelotctl screen key-down <screen-id> <key> [--character <text>]
+      |ocelotctl screen key-up <screen-id> <key> [--character <text>]
+      |ocelotctl screen capture <screen-id> --format <png|text|cells-json> [--path <relative-path>] [--scale <n>]
+      |ocelotctl snapshot save <name> [--host-disks <reference-only|copy>]
+      |ocelotctl snapshot load <name>
+      |ocelotctl diagnostics collect [--path <relative-path>]
+      |```
+      |
+      |Daemon lifecycle commands:
+      |
+      |```text
+      |ocelot-harnessd up --project <path>
+      |ocelot-harnessd status --project <path> [--json]
+      |ocelot-harnessd down --project <path> [--json]
+      |ocelot-harnessd force-stop --project <path>
+      |ocelot-harnessd serve <--stdio|--loopback> --project <path>
+      |```
+      |
+      |Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+      |""".stripMargin
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])
   private final case class CliRequest(

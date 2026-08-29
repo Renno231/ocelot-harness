@@ -47,7 +47,11 @@ private[project] object LogicalId {
 final case class ServicePolicy(
     additionalReadWriteRoots: Vector[Path] = Vector.empty,
     allowInternetHttp: Boolean = false,
-    allowInternetTcp: Boolean = false
+    allowInternetTcp: Boolean = false,
+    maxComputers: Int = 16,
+    maxScreens: Int = 16,
+    maxConnections: Int = 64,
+    maxManagedDisks: Int = 32
 )
 
 final case class ProjectPaths(
@@ -81,12 +85,27 @@ sealed trait MemoryTier extends Product with Serializable {
 }
 
 object MemoryTier {
+  case object One extends MemoryTier {
+    override val value: BigDecimal = BigDecimal(1)
+  }
+  case object OneAndHalf extends MemoryTier {
+    override val value: BigDecimal = BigDecimal("1.5")
+  }
+  case object Two extends MemoryTier {
+    override val value: BigDecimal = BigDecimal(2)
+  }
+  case object TwoAndHalf extends MemoryTier {
+    override val value: BigDecimal = BigDecimal("2.5")
+  }
   case object Three extends MemoryTier {
     override val value: BigDecimal = BigDecimal(3)
   }
   case object ThreeAndHalf extends MemoryTier {
     override val value: BigDecimal = BigDecimal("3.5")
   }
+
+  val values: Vector[MemoryTier] =
+    Vector(One, OneAndHalf, Two, TwoAndHalf, Three, ThreeAndHalf)
 }
 
 sealed trait DiskAccess extends Product with Serializable

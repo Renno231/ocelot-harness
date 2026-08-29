@@ -1,8 +1,10 @@
 import sbt._
 import Keys._
 
+import scala.sys.process._
+
 ThisBuild / organization := "org.ocelot-harness"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version := "0.1.0"
 ThisBuild / scalaVersion := "2.13.10"
 
 lazy val commonSettings = Seq(
@@ -17,8 +19,37 @@ lazy val commonSettings = Seq(
   ),
   Test / fork := true,
   Test / parallelExecution := false,
-  scalafmtOnCompile := false
+  scalafmtOnCompile := false,
+  dependencyOverrides ++= Seq(
+    "org.apache.logging.log4j" % "log4j-api" % "2.25.5",
+    "org.apache.logging.log4j" % "log4j-core" % "2.25.5"
+  )
 )
+
+lazy val buildIdentityResource = Def.task {
+  val repository = (LocalRootProject / baseDirectory).value
+  val output = (Compile / resourceManaged).value / "ocelot-harness-build.properties"
+  val commit = Process(Seq("git", "rev-parse", "HEAD"), repository).!!.trim
+  val dirty = Process(Seq("git", "status", "--porcelain", "--untracked-files=all"), repository).!!.trim.nonEmpty
+  IO.write(output, s"harness.commit=$commit\nharness.dirty=$dirty\n")
+  Seq(output)
+}
+
+lazy val releaseMetadataResources = Def.task {
+  val repository = (LocalRootProject / baseDirectory).value
+  val output = (Compile / resourceManaged).value / "META-INF" / "ocelot-harness"
+  val resources = Vector(
+    repository / "LICENSE" -> (output / "licenses" / "ocelot-harness-MIT.txt"),
+    repository / "THIRD_PARTY_NOTICES.md" -> (output / "THIRD_PARTY_NOTICES.md"),
+    repository / "docs" / "release" / "dependencies.md" -> (output / "dependencies.md"),
+    repository / "docs" / "release" / "sbom.cdx.json" -> (output / "sbom.cdx.json"),
+    repository / "lib" / "ocelot-brain" / "LICENSE" -> (output / "licenses" / "ocelot-brain-MIT.txt"),
+    repository / "lib" / "ocelot-brain" / "LICENSE-oc" -> (output / "licenses" / "OpenComputers-resources.txt"),
+    repository / "lib" / "ocelot-brain" / "LICENSE-unifont" -> (output / "licenses" / "unifont-OFL-1.1.txt")
+  )
+  resources.foreach { case (source, target) => IO.copyFile(source, target) }
+  resources.map(_._2)
+}
 
 lazy val ocelotBrain = RootProject(file("lib/ocelot-brain"))
 
@@ -30,7 +61,8 @@ lazy val harnessCore = (project in file("modules/core"))
     libraryDependencies ++= Seq(
       "com.typesafe" % "config" % "1.4.4",
       "org.scalatest" %% "scalatest" % "3.2.19" % Test
-    )
+    ),
+    Compile / resourceGenerators += buildIdentityResource.taskValue
   )
 
 lazy val harnessApp = (project in file("modules/app"))
@@ -43,6 +75,7 @@ lazy val harnessApp = (project in file("modules/app"))
       "org.scalatest" %% "scalatest" % "3.2.19" % Test
     ),
     Compile / mainClass := Some("ocelot.harness.app.HarnessDaemon"),
+    Compile / resourceGenerators += releaseMetadataResources.taskValue,
     assembly / mainClass := (Compile / mainClass).value,
     assembly / assemblyJarName := "ocelot-harness.jar",
     assembly / assemblyOutputPath := baseDirectory.value / "target" / (assembly / assemblyJarName).value,

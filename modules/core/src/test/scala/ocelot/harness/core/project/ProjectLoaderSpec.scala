@@ -34,6 +34,20 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
     }
   }
 
+  test("the checked-in two-computer example is a valid bounded schema-v1 project") {
+    val candidates = Vector(
+      java.nio.file.Paths.get("examples", "two-computers"),
+      java.nio.file.Paths.get("..", "..", "examples", "two-computers")
+    ).map(_.toAbsolutePath.normalize())
+    val root = candidates.find(Files.isDirectory(_)).getOrElse(fail("example project is missing"))
+
+    val project = ProjectLoader.load(root).value
+    project.computers.map(_.id.value) shouldBe Vector("alpha", "beta")
+    project.computers.map(_.caseTier) shouldBe Vector(3, 2)
+    project.screens.map(_.tier) shouldBe Vector(3, 2)
+    project.computers(1).hardware.disks.head.access shouldBe DiskAccess.ReadOnly
+  }
+
   test("logical IDs are publicly constructible only through validated typed parsers") {
     val computer = ComputerId.parse("main").value
     val screen = ScreenId.parse("main").value
@@ -154,6 +168,75 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
           ProjectLoader.load(root).left.value.errors.map(_.code) should contain("profile_violation")
         }
       }
+    }
+  }
+
+  test("tier-1 and tier-2 computer and screen profiles are accepted with legal components") {
+    val cases = Vector(
+      1 -> validManifest()
+        .replace("caseTier = 3", "caseTier = 1")
+        .replace("cpu = { tier = 3 }", "cpu = { tier = 1 }")
+        .replace("memory = [{ tier = 3.5 }]", "memory = [{ tier = 1.5 }]")
+        .replace("gpu = { tier = 3 }", "gpu = { tier = 1 }")
+        .replace("tier = 3\n          label", "tier = 1\n          label")
+        .replace(
+          "cards = [{ kind = \"network\", tier = 2 }]",
+          "cards = [{ kind = \"network\", tier = 1 }]"
+        )
+        .replace("screens { main { tier = 3", "screens { main { tier = 1"),
+      2 -> validManifest()
+        .replace("caseTier = 3", "caseTier = 2")
+        .replace("cpu = { tier = 3 }", "cpu = { tier = 2 }")
+        .replace("memory = [{ tier = 3.5 }]", "memory = [{ tier = 2.5 }]")
+        .replace("gpu = { tier = 3 }", "gpu = { tier = 2 }")
+        .replace("tier = 3\n          label", "tier = 2\n          label")
+        .replace("screens { main { tier = 3", "screens { main { tier = 2")
+    )
+
+    cases.foreach { case (tier, manifest) =>
+      withProject(manifest) { root =>
+        withClue(s"tier $tier") {
+          val project = ProjectLoader.load(root).value
+          project.computers.head.caseTier shouldBe tier
+          project.computers.head.hardware.cpuTier shouldBe tier
+          project.computers.head.hardware.gpuTier shouldBe tier
+          project.screens.head.tier shouldBe tier
+        }
+      }
+    }
+  }
+
+  test("hardware tiers and slot counts cannot exceed their case profile") {
+    val tierOneWithTierTwoParts = validManifest()
+      .replace("caseTier = 3", "caseTier = 1")
+      .replace("cpu = { tier = 3 }", "cpu = { tier = 2 }")
+      .replace("memory = [{ tier = 3.5 }]", "memory = [{ tier = 1 }, { tier = 1 }]")
+      .replace("gpu = { tier = 3 }", "gpu = { tier = 2 }")
+
+    withProject(tierOneWithTierTwoParts) { root =>
+      val errors = ProjectLoader.load(root).left.value.errors
+      errors.count(_.code == "profile_violation") should be >= 4
+    }
+  }
+
+  test("service-owned topology limits bound device and connection counts") {
+    val manifest = validManifest()
+      .replace(
+        "screens { main { tier = 3, keyboard = true } }",
+        "screens { main { tier = 3, keyboard = true }, aux { tier = 3 } }"
+      )
+      .replace(
+        "connections = [{ from = \"computer:main\", to = \"screen:main\" }]",
+        "connections = [{ from = \"computer:main\", to = \"screen:main\" }, { from = \"computer:main\", to = \"screen:aux\" }]"
+      )
+
+    withProject(manifest) { root =>
+      val errors = ProjectLoader
+        .load(root, ServicePolicy(maxScreens = 1, maxConnections = 1))
+        .left
+        .value
+        .errors
+      errors.map(_.path) should contain allElementsOf Vector("screens", "connections")
     }
   }
 

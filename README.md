@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. The completed foundation, project-construction, interactive-execution, artifacts/recovery, and external-control-plane milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable observations and input, deterministic artifacts and recovery, versioned JSON-RPC, authenticated loopback service ownership, and a general CLI. Release hardening is the remaining milestone.
+Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux.
 
 Start here:
 
@@ -23,7 +23,7 @@ Start here:
 ## Implemented capabilities
 
 - versioned HOCON project manifests with stable logical device IDs
-- one validated tier-3 computer/screen hardware profile
+- validated tier-1, tier-2, and tier-3 computer/screen profiles with service-owned topology caps
 - host-directory-backed managed disks with canonical allowed-root policy
 - machine start, stop, reset, and condition-driven bounded simulation
 - immutable Unicode text/cell/color/palette screen snapshots
@@ -36,12 +36,10 @@ Start here:
 - agent-owned stdio with protocol-only stdout
 - authenticated `127.0.0.1` service ownership with atomic connection metadata
 - `ocelot-harnessd` lifecycle commands and `ocelotctl` machine, screen, snapshot, and diagnostic commands
-- an isolated real-brain vertical fixture under `fixtures/vertical-spike/`
-
-## Remaining Phase 1 capabilities
-
-- broader multi-device and hardware-profile coverage
-- cross-platform release evidence and distribution hardening
+- an isolated vertical fixture and forked real-brain multi-device integration project
+- independent computers, screens, host disks, targeted input paths, diagnostics, and configured network connectivity
+- exact harness/brain commit identity in packaged protocol responses
+- checked-in [CLI reference](docs/reference/cli.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
 
 Ocelot Desktop canvas/window automation is outside Phase 1.
 
@@ -69,7 +67,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, exact build identity, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
 
 ## License
 

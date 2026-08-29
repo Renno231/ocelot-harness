@@ -13,7 +13,14 @@ import com.typesafe.config._
 import ocelot.harness.core.project.CardKind.Network
 import ocelot.harness.core.project.ConnectionEndpoint.{Computer, Screen}
 import ocelot.harness.core.project.DiskAccess.{ReadOnly, ReadWrite}
-import ocelot.harness.core.project.MemoryTier.{Three, ThreeAndHalf}
+import ocelot.harness.core.project.MemoryTier.{
+  One,
+  OneAndHalf,
+  Three,
+  ThreeAndHalf,
+  Two,
+  TwoAndHalf
+}
 
 object ProjectLoader {
   val ManifestFileName: String = "ocelot-harness.conf"
@@ -204,6 +211,7 @@ object ProjectLoader {
     }
 
     def read(): Either[ProjectErrors, ValidatedProject] = {
+      validateServiceLimits()
       canonicalAllowedRoots
       rejectUnknown(
         "",
@@ -298,7 +306,18 @@ object ProjectLoader {
       if (ids.isEmpty && hasObject("computers")) {
         invalid("computers", "at least one computer is required")
       }
-      ids.flatMap(readComputer)
+      if (ids.size > policy.maxComputers) {
+        profile("computers", s"must not exceed service limit ${policy.maxComputers}")
+      }
+      val computers = ids.flatMap(readComputer)
+      val diskCount = computers.map(_.hardware.disks.size).sum
+      if (diskCount > policy.maxManagedDisks) {
+        profile(
+          "computers",
+          s"managed disks must not exceed service limit ${policy.maxManagedDisks}"
+        )
+      }
+      computers
     }
 
     private def readComputer(rawId: String): Option[ComputerDefinition] = {
@@ -307,9 +326,9 @@ object ProjectLoader {
       val id = parseComputerId(path, rawId)
       val caseTier = requiredInt(s"$path.caseTier")
       caseTier.foreach { tier =>
-        if (tier != 3) profile(s"$path.caseTier", "the initial profile requires tier 3")
+        if (tier < 1 || tier > 3) profile(s"$path.caseTier", "must be tier 1, 2, or 3")
       }
-      val hardware = readHardware(s"$path.hardware")
+      val hardware = readHardware(s"$path.hardware", caseTier.getOrElse(3))
       for {
         computerId <- id
         tier <- caseTier
@@ -317,7 +336,7 @@ object ProjectLoader {
       } yield ComputerDefinition(computerId, tier, validatedHardware)
     }
 
-    private def readHardware(path: String): Option[HardwareDefinition] = {
+    private def readHardware(path: String, caseTier: Int): Option[HardwareDefinition] = {
       rejectUnknown(path, Set("cpu", "memory", "gpu", "eeprom", "disks", "cards"))
       rejectUnknown(s"$path.cpu", Set("tier"))
       rejectUnknown(s"$path.gpu", Set("tier"))
@@ -326,15 +345,15 @@ object ProjectLoader {
       val cpuTier = requiredProfileInt(s"$path.cpu.tier")
       val gpuTier = requiredProfileInt(s"$path.gpu.tier")
       val eeprom = requiredProfileString(s"$path.eeprom.builtin")
-      cpuTier.foreach(tier => requireTier3(s"$path.cpu.tier", tier))
-      gpuTier.foreach(tier => requireTier3(s"$path.gpu.tier", tier))
+      cpuTier.foreach(tier => requireComponentTier(s"$path.cpu.tier", tier, caseTier))
+      gpuTier.foreach(tier => requireComponentTier(s"$path.gpu.tier", tier, caseTier))
       eeprom.foreach { builtin =>
         if (builtin != "lua-bios") profile(s"$path.eeprom.builtin", "only lua-bios is supported")
       }
 
-      val memory = readMemory(s"$path.memory")
-      val disks = readDisks(s"$path.disks")
-      val cards = readCards(s"$path.cards")
+      val memory = readMemory(s"$path.memory", caseTier)
+      val disks = readDisks(s"$path.disks", caseTier)
+      val cards = readCards(s"$path.cards", caseTier)
       for {
         cpu <- cpuTier
         gpu <- gpuTier
@@ -342,28 +361,44 @@ object ProjectLoader {
       } yield HardwareDefinition(cpu, memory, gpu, bios, disks, cards)
     }
 
-    private def readMemory(path: String): Vector[MemoryTier] = {
+    private def readMemory(path: String, caseTier: Int): Vector[MemoryTier] = {
       val configs = configList(path, required = true)
+      val maxModules = if (caseTier == 1) 1 else 2
       if (configs.isEmpty) profile(path, "at least one memory module is required")
-      if (configs.size > 2) profile(path, "at most two memory modules are supported")
+      if (configs.size > maxModules)
+        profile(path, s"tier-$caseTier cases support at most $maxModules memory module(s)")
       configs.zipWithIndex.flatMap { case (entry, index) =>
         val entryPath = s"$path[$index]"
         rejectUnknown(entryPath, Set("tier"), Some(entry))
         configNumber(entry, "tier", s"$entryPath.tier").flatMap { value =>
-          BigDecimal(value.toString) match {
+          val requested = BigDecimal(value.toString)
+          val tier = requested match {
+            case MemoryTier.One.value          => Some(One)
+            case MemoryTier.OneAndHalf.value   => Some(OneAndHalf)
+            case MemoryTier.Two.value          => Some(Two)
+            case MemoryTier.TwoAndHalf.value   => Some(TwoAndHalf)
             case MemoryTier.Three.value        => Some(Three)
             case MemoryTier.ThreeAndHalf.value => Some(ThreeAndHalf)
-            case _ =>
-              profile(s"$entryPath.tier", "must be 3 or 3.5")
+            case _                             => None
+          }
+          tier.filter(_.value <= BigDecimal(caseTier) + BigDecimal("0.5")) match {
+            case valid @ Some(_) => valid
+            case None =>
+              profile(
+                s"$entryPath.tier",
+                s"must be a supported memory tier no greater than $caseTier.5"
+              )
               None
           }
         }
       }
     }
 
-    private def readDisks(path: String): Vector[DiskDefinition] = {
+    private def readDisks(path: String, caseTier: Int): Vector[DiskDefinition] = {
       val ids = objectKeys(path, required = false)
-      if (ids.size > 2) profile(path, "at most two managed disks are supported")
+      val maxDisks = if (caseTier == 1) 1 else 2
+      if (ids.size > maxDisks)
+        profile(path, s"tier-$caseTier cases support at most $maxDisks managed disk(s)")
       ids.zipWithIndex.flatMap { case (rawId, slotIndex) =>
         val diskPath = s"$path.$rawId"
         rejectUnknown(diskPath, Set("kind", "tier", "label", "source", "access"))
@@ -385,9 +420,12 @@ object ProjectLoader {
           if (value != "hdd") profile(s"$diskPath.kind", "only managed hdd is supported")
         }
         tier.foreach { value =>
-          if (value != 2 && value != 3) profile(s"$diskPath.tier", "must be tier 2 or 3")
-          else if (slotIndex > 0 && value != 2)
-            profile(s"$diskPath.tier", "the secondary disk slot supports tier 2")
+          val maxTier = if (slotIndex == 0) caseTier else math.max(1, caseTier - 1)
+          if (value < 1 || value > maxTier)
+            profile(
+              s"$diskPath.tier",
+              s"disk tier must fit the tier-$caseTier case slot (maximum $maxTier)"
+            )
         }
         label.foreach { value =>
           if (value.isEmpty || value.length > 64)
@@ -403,9 +441,11 @@ object ProjectLoader {
       }
     }
 
-    private def readCards(path: String): Vector[CardDefinition] = {
+    private def readCards(path: String, caseTier: Int): Vector[CardDefinition] = {
       val entries = configList(path, required = false)
-      if (entries.size > 2) profile(path, "at most two addon cards are supported")
+      val maxCards = if (caseTier == 1) 1 else 2
+      if (entries.size > maxCards)
+        profile(path, s"tier-$caseTier cases support at most $maxCards addon card(s)")
       entries.zipWithIndex.flatMap { case (entry, index) =>
         val cardPath = s"$path[$index]"
         rejectUnknown(cardPath, Set("kind", "tier"), Some(entry))
@@ -414,13 +454,17 @@ object ProjectLoader {
         kind.foreach { value =>
           if (value != "network") profile(s"$cardPath.kind", "only network cards are supported")
         }
+        val maxCardTier = math.min(2, caseTier)
         tier.foreach { value =>
-          if (value < 1 || value > 2)
-            profile(s"$cardPath.tier", "network card tier must fit a tier-2 card slot")
+          if (value < 1 || value > maxCardTier)
+            profile(
+              s"$cardPath.tier",
+              s"network card tier must fit the tier-$caseTier card slot"
+            )
         }
         for {
           cardKind <- kind if cardKind == "network"
-          cardTier <- tier if cardTier >= 1 && cardTier <= 2
+          cardTier <- tier if cardTier >= 1 && cardTier <= maxCardTier
         } yield CardDefinition(Network, cardTier)
       }
     }
@@ -430,12 +474,17 @@ object ProjectLoader {
       if (ids.isEmpty && hasObject("screens")) {
         invalid("screens", "at least one screen is required")
       }
+      if (ids.size > policy.maxScreens) {
+        profile("screens", s"must not exceed service limit ${policy.maxScreens}")
+      }
       ids.flatMap { rawId =>
         val path = s"screens.$rawId"
         rejectUnknown(path, Set("tier", "keyboard", "aspectRatio"))
         val id = parseScreenId(path, rawId)
         val tier = requiredInt(s"$path.tier")
-        tier.foreach(value => requireTier3(s"$path.tier", value))
+        tier.foreach { value =>
+          if (value < 1 || value > 3) profile(s"$path.tier", "must be tier 1, 2, or 3")
+        }
         val keyboard = optionalBoolean(s"$path.keyboard", default = false)
         val aspect = optionalIntList(s"$path.aspectRatio", Vector(1, 1))
         if (aspect.size != 2 || aspect.exists(_ <= 0)) {
@@ -458,6 +507,9 @@ object ProjectLoader {
       val entries = configList("connections", required = true)
       if (entries.isEmpty && config.hasPath("connections")) {
         profile("connections", "at least one computer-to-screen connection is required")
+      }
+      if (entries.size > policy.maxConnections) {
+        profile("connections", s"must not exceed service limit ${policy.maxConnections}")
       }
       val parsed = entries.zipWithIndex.flatMap { case (entry, index) =>
         val path = s"connections[$index]"
@@ -596,8 +648,20 @@ object ProjectLoader {
           None
       }
 
-    private def requireTier3(path: String, value: Int): Unit = {
-      if (value != 3) profile(path, "the initial profile requires tier 3")
+    private def requireComponentTier(path: String, value: Int, caseTier: Int): Unit = {
+      if (value < 1 || value > caseTier)
+        profile(path, s"must be between tier 1 and the tier-$caseTier case limit")
+    }
+
+    private def validateServiceLimits(): Unit = {
+      Vector(
+        "$service.maxComputers" -> policy.maxComputers,
+        "$service.maxScreens" -> policy.maxScreens,
+        "$service.maxConnections" -> policy.maxConnections,
+        "$service.maxManagedDisks" -> policy.maxManagedDisks
+      ).foreach { case (path, value) =>
+        if (value <= 0) invalid(path, "service limit must be positive", "invalid_service_policy")
+      }
     }
 
     private def rejectUnknown(

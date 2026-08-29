@@ -34,6 +34,8 @@ private[harness] object DiagnosticBundleWriter {
         entries += "versions.txt" -> utf8(
           Vector(
             s"harness=${BuildIdentity.HarnessVersion}",
+            s"harnessCommit=${BuildIdentity.HarnessCommit}",
+            s"sourceDirty=${BuildIdentity.SourceDirty}",
             s"brain=$brainVersion",
             s"brainCommit=${BuildIdentity.BrainCommit}",
             s"schema=${project.schemaVersion}",
