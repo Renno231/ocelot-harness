@@ -59,11 +59,12 @@ harness-core
 └─ contains no JSON-RPC or CLI presentation
 
 harness-app
-├─ owns protocol, transports, CLI, and process entrypoint
+├─ owns protocol, transports, CLI, optional viewer, and process entrypoints
+├─ confines AWT/Swing state to the separate viewer process
 └─ delegates emulation policy to harness-core
 ```
 
-Do not introduce a generic emulator backend interface while ocelot-brain is the only backend. Organize private implementation by responsibility without creating pass-through public wrappers.
+Do not introduce a generic emulator backend interface while ocelot-brain is the only backend. Organize private implementation by responsibility without creating pass-through public wrappers. Graphical viewer tests exercise pure decoding, geometry, protocol, and lifecycle behavior without requiring a display from canonical CI.
 
 ## Error handling
 

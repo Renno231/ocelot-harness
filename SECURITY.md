@@ -32,11 +32,18 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 - Project locks and process-instance identity checks protect stale cleanup and forced termination.
 - Tokens are excluded from ordinary logs, diagnostics, and command output.
 
+### Optional viewer
+
+- The graphical viewer is a separate authenticated loopback client; it does not run inside the daemon.
+- Only the selected screen is polled, and only immutable protocol snapshots are rendered.
+- Host clipboard content is read only after the user presses **Paste clipboard** and is then handled by the existing bounded paste-input contract.
+- Closing the window closes its client connection and bounded worker without stopping or taking ownership of the daemon.
+
 ### Resource limits
 
 Every run condition has both a maximum simulated tick count and wall-clock deadline. The harness also bounds:
 
-- service command queue
+- service and viewer command queues
 - event retention
 - device count
 - capture frequency
@@ -75,3 +82,4 @@ The following require explicit maintainer review and targeted abuse tests:
 - arbitrary class/plugin loading
 - command execution outside ocelot-brain
 - reduced resource bounds
+- automatic or background host-clipboard access

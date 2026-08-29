@@ -48,6 +48,12 @@ try {
     }
     Write-Host 'PASS: packaged release metadata and license notices'
 
+    $viewerHelp = (& java -cp $assemblyJar ocelot.harness.app.OcelotViewer --help | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $viewerHelp -notmatch '^usage: ocelot-viewer ') {
+        throw 'Packaged viewer entrypoint is unavailable'
+    }
+    Write-Host 'PASS: packaged viewer entrypoint'
+
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
     try {

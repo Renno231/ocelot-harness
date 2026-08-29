@@ -36,12 +36,13 @@ Start here:
 - agent-owned stdio with protocol-only stdout
 - authenticated `127.0.0.1` service ownership with atomic connection metadata
 - `ocelot-harnessd` lifecycle commands and `ocelotctl` machine, screen, snapshot, and diagnostic commands
+- an optional live `ocelot-viewer` window sharing the daemon session with agents and CLI clients
 - an isolated vertical fixture and forked real-brain multi-device integration project
 - independent computers, screens, host disks, targeted input paths, diagnostics, and configured network connectivity
 - exact harness/brain commit identity in packaged protocol responses
-- checked-in [CLI reference](docs/reference/cli.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
+- checked-in [CLI reference](docs/reference/cli.md), [live-viewer guide](docs/reference/viewer.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
 
-Ocelot Desktop canvas/window automation is outside Phase 1.
+The optional viewer renders and controls emulated screens only. Ocelot Desktop canvas/window automation remains outside the harness.
 
 ## Toolchain decision
 
@@ -67,7 +68,18 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, exact build identity, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, packaged viewer entrypoint, exact build identity, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
+
+## Live viewer
+
+Start the loopback daemon, then attach the separate Swing viewer to the same session:
+
+```text
+java -jar modules/app/target/ocelot-harness.jar up --project examples/two-computers
+scripts\ocelot-viewer.cmd --project examples/two-computers --screen alpha
+```
+
+The daemon remains headless and can be controlled concurrently through `ocelotctl`; closing the window does not stop it. See the [live-viewer guide](docs/reference/viewer.md) for POSIX usage, controls, scaling, and refresh bounds.
 
 ## License
 

@@ -9,7 +9,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
-import ocelot.harness.app.protocol.LoopbackClient
+import ocelot.harness.app.protocol.{LoopbackClient, LoopbackConnection}
 
 final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
   test("daemon up, authenticated CLI commands, status, and down share one project session") {
@@ -78,6 +78,24 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
         "10s"
       )
       ready("stopReason")("type").str shouldBe "condition_satisfied"
+
+      val persistent = LoopbackConnection
+        .open(projectDirectory)
+        .fold(error => fail(error.message), identity)
+      try {
+        val workspace = persistent
+          .call("workspace.describe")
+          .fold(error => fail(error.message), value => value)
+        workspace("projectId").str shouldBe "vertical-spike"
+        val screen = persistent
+          .call("screen.read", ujson.Obj("screenId" -> "main"))
+          .fold(error => fail(error.message), value => value)
+        screen("screenId").str shouldBe "main"
+        val concurrentOneShot = LoopbackClient
+          .call(projectDirectory, "screen.read", ujson.Obj("screenId" -> "main"))
+          .fold(error => fail(error.message), value => value)
+        concurrentOneShot("screenId").str shouldBe "main"
+      } finally persistent.close()
 
       val executor = Executors.newFixedThreadPool(4)
       try {

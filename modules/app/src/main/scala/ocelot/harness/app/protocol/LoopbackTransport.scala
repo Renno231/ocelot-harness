@@ -346,7 +346,7 @@ private[app] object LoopbackServer {
     val server = new ServerSocket()
     val running = new AtomicBoolean(true)
     val executor = new ThreadPoolExecutor(
-      1,
+      4,
       4,
       30L,
       TimeUnit.SECONDS,
@@ -354,6 +354,7 @@ private[app] object LoopbackServer {
       daemonThreadFactory,
       new ThreadPoolExecutor.AbortPolicy()
     )
+    executor.allowCoreThreadTimeOut(true)
     try {
       server.setReuseAddress(false)
       server.bind(new InetSocketAddress(address, 0), 32)
@@ -424,52 +425,44 @@ private[app] final case class RpcClientFailure(
     harnessCode: Option[String] = None
 )
 
-private[app] object LoopbackClient {
+private[app] final class LoopbackConnection private (
+    socket: Socket,
+    writer: BufferedWriter,
+    reader: BufferedReader,
+    token: String
+) extends AutoCloseable {
+  private val closed = new AtomicBoolean(false)
+  private var requestSequence = 0L
+  private var negotiatedVersion: Option[ujson.Value] = None
+
+  private[protocol] def handshake(): Either[RpcClientFailure, Unit] = synchronized {
+    exchange(
+      ujson.Str("handshake"),
+      "harness.version",
+      ujson.Obj("protocolMajor" -> BuildIdentity.ProtocolVersion, "token" -> token)
+    ).map { version =>
+      negotiatedVersion = Some(version)
+      ()
+    }
+  }
+
   def call(
-      projectRoot: Path,
       method: String,
       params: ujson.Obj = ujson.Obj()
-  ): Either[RpcClientFailure, ujson.Value] =
-    ConnectionMetadata
-      .read(projectRoot)
-      .left
-      .map(message => RpcClientFailure(AppExitCode.Connection, message))
-      .flatMap(metadata => call(metadata, method, params))
-
-  def ping(projectRoot: Path): Either[RpcClientFailure, ujson.Value] =
-    call(projectRoot, "workspace.describe")
-
-  private def call(
-      metadata: ConnectionMetadata,
-      method: String,
-      params: ujson.Obj
-  ): Either[RpcClientFailure, ujson.Value] = {
-    val socket = new Socket()
-    try {
-      socket.connect(new InetSocketAddress(metadata.host, metadata.port), 3000)
-      socket.setSoTimeout(30000)
-      val writer = new BufferedWriter(
-        new OutputStreamWriter(socket.getOutputStream, StandardCharsets.UTF_8)
+  ): Either[RpcClientFailure, ujson.Value] = synchronized {
+    if (closed.get()) Left(RpcClientFailure(AppExitCode.Connection, "service connection is closed"))
+    else if (method == "harness.version")
+      negotiatedVersion.toRight(
+        RpcClientFailure(AppExitCode.Protocol, "protocol handshake is incomplete")
       )
-      val reader = new BufferedReader(
-        new InputStreamReader(socket.getInputStream, StandardCharsets.UTF_8)
-      )
-      exchange(
-        writer,
-        reader,
-        ujson.Str("handshake"),
-        "harness.version",
-        ujson.Obj("protocolMajor" -> BuildIdentity.ProtocolVersion, "token" -> metadata.token)
-      ).flatMap { version =>
-        if (method == "harness.version") Right(version)
-        else exchange(writer, reader, ujson.Str("request"), method, params)
-      }
-    } catch {
-      case NonFatal(error) =>
-        Left(
-          RpcClientFailure(AppExitCode.Connection, s"service connection failed: ${message(error)}")
-        )
-    } finally {
+    else {
+      requestSequence = if (requestSequence == Long.MaxValue) 1L else requestSequence + 1L
+      exchange(ujson.Str(s"persistent-$requestSequence"), method, params)
+    }
+  }
+
+  override def close(): Unit = {
+    if (closed.compareAndSet(false, true)) {
       try socket.close()
       catch {
         case NonFatal(_) =>
@@ -478,6 +471,92 @@ private[app] object LoopbackClient {
   }
 
   private def exchange(
+      id: ujson.Value,
+      method: String,
+      params: ujson.Obj
+  ): Either[RpcClientFailure, ujson.Value] = {
+    try {
+      val result = LoopbackClient.exchange(writer, reader, id, method, params)
+      result match {
+        case Left(error) if error.exitCode == AppExitCode.Connection => close()
+        case _                                                       =>
+      }
+      result
+    } catch {
+      case NonFatal(error) =>
+        close()
+        Left(
+          RpcClientFailure(
+            AppExitCode.Connection,
+            s"service connection failed: ${message(error)}"
+          )
+        )
+    }
+  }
+
+  private def message(error: Throwable): String =
+    Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
+}
+
+private[app] object LoopbackConnection {
+  def open(projectRoot: Path): Either[RpcClientFailure, LoopbackConnection] =
+    ConnectionMetadata
+      .read(projectRoot)
+      .left
+      .map(message => RpcClientFailure(AppExitCode.Connection, message))
+      .flatMap(open)
+
+  private def open(
+      metadata: ConnectionMetadata
+  ): Either[RpcClientFailure, LoopbackConnection] = {
+    val socket = new Socket()
+    try {
+      socket.connect(new InetSocketAddress(metadata.host, metadata.port), 3000)
+      socket.setSoTimeout(30000)
+      val connection = new LoopbackConnection(
+        socket,
+        new BufferedWriter(new OutputStreamWriter(socket.getOutputStream, StandardCharsets.UTF_8)),
+        new BufferedReader(new InputStreamReader(socket.getInputStream, StandardCharsets.UTF_8)),
+        metadata.token
+      )
+      connection.handshake() match {
+        case Right(_)    => Right(connection)
+        case Left(error) => connection.close(); Left(error)
+      }
+    } catch {
+      case NonFatal(error) =>
+        try socket.close()
+        catch {
+          case NonFatal(_) =>
+        }
+        Left(
+          RpcClientFailure(
+            AppExitCode.Connection,
+            s"service connection failed: ${message(error)}"
+          )
+        )
+    }
+  }
+
+  private def message(error: Throwable): String =
+    Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
+}
+
+private[app] object LoopbackClient {
+  def call(
+      projectRoot: Path,
+      method: String,
+      params: ujson.Obj = ujson.Obj()
+  ): Either[RpcClientFailure, ujson.Value] =
+    LoopbackConnection.open(projectRoot).flatMap { connection =>
+      try connection.call(method, params)
+      finally connection.close()
+    }
+
+  def ping(projectRoot: Path): Either[RpcClientFailure, ujson.Value] =
+    call(projectRoot, "workspace.describe")
+
+  private[protocol] def exchange(
       writer: BufferedWriter,
       reader: BufferedReader,
       id: ujson.Value,

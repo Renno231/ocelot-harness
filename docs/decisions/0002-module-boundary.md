@@ -12,7 +12,7 @@ The project needs a reusable headless automation API and an executable external 
 Create two first-party SBT modules:
 
 - `harness-core`: owns runtime lifecycle, project validation, legal hardware construction, simulation control, input, observations, events, and snapshots.
-- `harness-app`: owns JSON-RPC contracts, transports, CLI presentation, and the executable process.
+- `harness-app`: owns JSON-RPC contracts, transports, CLI presentation, the optional Swing screen viewer, and executable processes.
 
 `harness-core` exposes intention-level operations using first-party immutable models. Brain classes, raw inventory indexes, synchronization, subscriptions, and cleanup remain private.
 
@@ -25,7 +25,8 @@ Use one concrete brain-backed implementation. Do not create a generic emulator b
 - Brain upgrades are localized behind the core boundary.
 - Packages may split private implementation by responsibility without widening the public interface.
 - Core integration tests exercise real ocelot-brain rather than mocks.
-- The application can evolve transports without changing emulation behavior.
+- The application can evolve transports and optional presentation clients without changing emulation behavior.
+- AWT/Swing state remains confined to the separate viewer process; the core and daemon stay window-free.
 
 ## Invariants
 

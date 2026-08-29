@@ -38,7 +38,7 @@ Phase 1 includes:
 - an agent-owned stdio transport and a loopback transport for standalone CLI commands
 - a general CLI
 
-The implementation boundary ends at ocelot-brain. Ocelot Desktop canvas nodes, windows, menus, OpenGL rendering, and Desktop screenshots belong to a future Desktop integration.
+The implementation boundary ends at ocelot-brain. The optional app-owned Swing viewer renders exact emulated screen snapshots from the existing loopback protocol; it does not embed or control Ocelot Desktop. Desktop canvas nodes, windows, menus, OpenGL rendering, and Desktop screenshots belong to a future Desktop integration.
 
 ## Constraints inherited from ocelot-brain
 
@@ -56,7 +56,7 @@ The implementation boundary ends at ocelot-brain. Ocelot Desktop canvas nodes, w
 
 ```text
 ┌──────────────────────── clients ────────────────────────┐
-│  ocelotctl CLI     Pi/agent client     test client      │
+│  ocelotctl CLI   live viewer   Pi/agent client   tests  │
 └───────────────┬─────────────┬──────────────┬────────────┘
                 │ JSON-RPC 2.0 messages
 ┌───────────────▼─────────────────────────────────────────┐
@@ -104,10 +104,11 @@ ocelot-harness/
 │  │     └─ snapshot/               save/load and metadata
 │  └─ app/
 │     └─ src/{main,test}/scala/ocelot/harness/app/
-│        ├─ protocol/               JSON-RPC wire contracts and codec
-│        ├─ transport/              stdio and loopback adapters
-│        ├─ cli/                    command parsing and presentation
-│        └─ Main.scala              executable entry point
+│        ├─ protocol/               JSON-RPC and loopback ownership
+│        ├─ viewer/                 wire decoding and input geometry
+│        ├─ OcelotCtl.scala         command parsing and presentation
+│        ├─ OcelotViewer.scala      optional Swing screen client
+│        └─ HarnessDaemon.scala     service lifecycle entry point
 ├─ fixtures/                        deterministic integration projects
 ├─ docs/
 └─ scripts/                         reproducible bootstrap/verification
@@ -118,7 +119,7 @@ Only two first-party SBT modules are created initially:
 | Module | Public purpose | Dependencies |
 |---|---|---|
 | `harness-core` | Typed headless automation API; hides all brain lifecycle and concurrency rules | ocelot-brain |
-| `harness-app` | External protocol, transports, CLI, and process entrypoint | `harness-core` |
+| `harness-app` | External protocol, transports, CLI, optional viewer, and process entrypoints | `harness-core` |
 
 Packages organize private implementation responsibilities without creating additional public module interfaces. There is one concrete ocelot-brain implementation in Phase 1. A generic emulator-backend interface is not introduced until a second real backend exists.
 
@@ -423,6 +424,16 @@ ocelot-harnessd down
 Separate CLI invocations require a persistent attachable transport; stdio cannot provide that. Loopback mode binds an operating-system-assigned port on `127.0.0.1` only and writes owner-only connection metadata atomically beneath `.ocelot-harness/run/`. The metadata contains process ID and start time, instance identity, port, protocol version, project identity, and a 256-bit random session token. Every connection authenticates before commands are accepted.
 
 A project file lock protects both stdio and loopback ownership. The runtime refuses a second live owner for the same project. Stale metadata is removed only when it matches the prior locked owner identity, and forced termination first verifies that the live lock identity still matches the metadata.
+
+### Optional headed screen viewer
+
+```text
+ocelot-viewer --project <path> [--screen <logical-id>]
+```
+
+The viewer is a separate `harness-app` process that attaches through the same authenticated loopback contract as the CLI. It keeps one persistent connection, polls only the selected screen at a bounded interval, decodes immutable cell/color/revision data, and reuses `ScreenRenderer` for exact integer-scaled pixels. Rendering and Swing state stay outside `harness-core` and the daemon; the viewer's background lane performs protocol work and the Swing event-dispatch thread alone updates widgets.
+
+Mouse coordinates map to one-based cells. Click, drag, scroll, typed and special-key input, and explicit host-clipboard paste use the existing `screen.input` method with the viewer user identity. Closing the window closes its connection and worker without stopping the daemon. No WebSocket, push protocol, public RPC method, non-loopback binding, or Ocelot Desktop dependency is added.
 
 ## Error model
 

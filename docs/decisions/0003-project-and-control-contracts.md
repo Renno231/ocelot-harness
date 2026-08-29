@@ -5,7 +5,7 @@
 
 ## Context
 
-Projects need a reviewable desired-configuration format independent of Ocelot's compressed runtime NBT. Agent-owned subprocesses can use stdio, while separate shell CLI invocations require an attachable long-lived service transport.
+Projects need a reviewable desired-configuration format independent of Ocelot's compressed runtime NBT. Agent-owned subprocesses can use stdio, while separate shell CLI invocations and an optional headed screen viewer require an attachable long-lived service transport.
 
 ## Decision
 
@@ -24,7 +24,7 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 - Use JSON-RPC 2.0 with a separately versioned Ocelot Harness protocol major version.
 - Keep request dispatch independent of transport.
 - Support newline-delimited JSON-RPC over stdio for an owning agent/test process.
-- Support authenticated loopback transport for persistent service access by separate CLI invocations.
+- Support authenticated loopback transport for persistent service access by separate CLI and viewer processes.
 - Return artifact paths and SHA-256 metadata instead of embedding large binary payloads in JSON.
 
 ## Consequences
@@ -32,7 +32,7 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 - Project topology can be reviewed and version-controlled.
 - Random runtime addresses do not destabilize scripts or tests.
 - Pi tooling and the general CLI use one command contract.
-- The service can remain alive between shell commands.
+- The service can remain alive between shell commands and while a user observes the same session through the viewer.
 - Loopback lifecycle metadata and authentication require dedicated security and stale-process tests.
 - Schema and protocol changes require compatibility policy and contract tests.
 
@@ -48,4 +48,4 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 
 Project construction parses schema version 1 into immutable typed models before creating brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, Internet double opt-in, tier-1 through tier-3 legality, and service-owned topology caps. Forked real-brain tests construct and operate independent tier-2/tier-3 computers and screens without exposing brain types or slot indexes; the pure profile contract also covers tier 1.
 
-Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent CLI access, bounded shutdown, and path handling with spaces.
+Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent access, concurrent one-shot CLI calls beside a persistent viewer connection, bounded shutdown, and path handling with spaces.

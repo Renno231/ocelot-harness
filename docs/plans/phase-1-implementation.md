@@ -517,6 +517,14 @@ Add profiles and tests in value order:
 
 Hosted CI configuration is added when the repository host is selected. It invokes the same canonical verification scripts used locally.
 
+## Post-Phase 1 extension — Optional headed screen viewer
+
+- **Status:** Implemented
+
+A separate `harness-app` Swing process attaches to the existing authenticated loopback service without changing the protocol, daemon ownership, core API, or pinned brain. It keeps one persistent connection, polls only the selected logical screen at a bounded interval, decodes exact immutable cells/colors/revisions, renders with the existing headless `ScreenRenderer`, and sends mouse, keyboard, scroll, and explicit clipboard input through `screen.input`.
+
+Viewer acceptance requires pure decoding/geometry/input tests without a display, a real loopback test proving a persistent viewer connection does not block concurrent CLI clients, packaged `--help` verification, and a headed smoke showing a live screen revision after external input. Closing the viewer must release its worker and connection without stopping the project daemon. Ocelot Desktop remains outside the boundary.
+
 ## Canonical verification target
 
 After the foundation milestone, these commands are the required interfaces:
@@ -536,6 +544,7 @@ submodule pin check
 → real-brain integration tests in isolated fork
 → process/protocol tests
 → assembly
+→ packaged viewer entrypoint check
 → packaged vertical smoke test
 ```
 

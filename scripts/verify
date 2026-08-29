@@ -32,6 +32,16 @@ jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/sbom.cdx.json'
 jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt'
 printf '%s\n' 'PASS: packaged release metadata and license notices'
 
+viewer_help=$(java -cp "$assembly_jar" ocelot.harness.app.OcelotViewer --help)
+case "$viewer_help" in
+  'usage: ocelot-viewer '*) ;;
+  *)
+    printf '%s\n' 'ERROR: packaged viewer entrypoint is unavailable' >&2
+    exit 1
+    ;;
+esac
+printf '%s\n' 'PASS: packaged viewer entrypoint'
+
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
 protocol_input="$smoke_directory/input.ndjson"
