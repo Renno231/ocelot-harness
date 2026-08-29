@@ -13,6 +13,8 @@ import totoro.ocelot.brain.workspace.Workspace
 
 import ocelot.harness.core.HarnessError
 import ocelot.harness.core.HarnessError._
+import ocelot.harness.core.project.{ProjectLoader, ServicePolicy}
+import ocelot.harness.core.workspace.HarnessSession
 
 final class RuntimeOwner private[runtime] (
     coordinator: RuntimeCoordinator,
@@ -25,25 +27,56 @@ final class RuntimeOwner private[runtime] (
   private var initializationStarted = false
   private var closed = false
 
-  def openProject(root: Path): Either[HarnessError, BrainSession] = synchronized {
+  def openProject(
+      root: Path,
+      policy: ServicePolicy = ServicePolicy()
+  ): Either[HarnessError, HarnessSession] = synchronized {
+    if (closed) {
+      Left(RuntimeClosed)
+    } else if (activeSession.nonEmpty) {
+      Left(ProjectAlreadyOpen)
+    } else if (policy == null) {
+      Left(ProjectOpenFailed(String.valueOf(root), "service policy is required"))
+    } else {
+      ProjectLoader.load(root, policy) match {
+        case Left(errors) => Left(ProjectValidationFailed(errors.errors))
+        case Right(project) =>
+          try {
+            val workspace = new Workspace(project.paths.projectRoot)
+            val description = HardwareCatalog.construct(project, workspace)
+            val session = new BrainSession(
+              project.paths.projectRoot,
+              workspace,
+              Some(description),
+              sessionClosed
+            )
+            activeSession = Some(session)
+            Right(session)
+          } catch {
+            case NonFatal(error) =>
+              Left(ProjectOpenFailed(project.paths.projectRoot.toString, errorMessage(error)))
+          }
+      }
+    }
+  }
+
+  private[runtime] def openEmptySessionForTesting(
+      root: Path
+  ): Either[HarnessError, BrainSession] = synchronized {
     if (closed) {
       Left(RuntimeClosed)
     } else if (activeSession.nonEmpty) {
       Left(ProjectAlreadyOpen)
     } else {
-      normalizeProjectRoot(root).flatMap { projectRoot =>
-        try {
-          val session = new BrainSession(
-            projectRoot,
-            new Workspace(projectRoot),
-            sessionClosed
-          )
-          activeSession = Some(session)
-          Right(session)
-        } catch {
-          case NonFatal(error) =>
-            Left(ProjectOpenFailed(projectRoot.toString, errorMessage(error)))
-        }
+      normalizeProjectRoot(root).map { projectRoot =>
+        val session = new BrainSession(
+          projectRoot,
+          new Workspace(projectRoot),
+          None,
+          sessionClosed
+        )
+        activeSession = Some(session)
+        session
       }
     }
   }

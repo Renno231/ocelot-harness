@@ -95,8 +95,8 @@ ocelot-harness/
 ├─ modules/
 │  ├─ core/
 │  │  └─ src/{main,test}/scala/ocelot/harness/core/
-│  │     ├─ runtime/                process and session lifecycle
-│  │     ├─ project/                manifest, path policy, hardware catalog
+│  │     ├─ runtime/                process/session lifecycle and hardware catalog
+│  │     ├─ project/                manifest, IDs, and path policy
 │  │     ├─ simulation/             ticking and bounded conditions
 │  │     ├─ input/                  user-action translation
 │  │     ├─ screen/                 snapshots and headless rendering
@@ -132,7 +132,7 @@ Packages organize private implementation responsibilities without creating addit
 
 ```scala
 RuntimeOwner.start(config: RuntimeConfig): Either[HarnessError, RuntimeOwner]
-RuntimeOwner.openProject(root: Path): Either[HarnessError, BrainSession]
+RuntimeOwner.openProject(root: Path, policy: ServicePolicy): Either[HarnessError, HarnessSession]
 RuntimeOwner.close(): Unit
 ```
 
@@ -151,7 +151,7 @@ Callers never invoke Ocelot global lifecycle methods directly.
 **Purpose:** Turn a project directory into a fully validated desired topology.
 
 ```scala
-ProjectLoader.load(root: Path): Either[NonEmptyList[ProjectError], ValidatedProject]
+ProjectLoader.load(root: Path, policy: ServicePolicy): Either[ProjectErrors, ValidatedProject]
 ```
 
 It owns:
@@ -317,7 +317,7 @@ computers {
         }
       }
 
-      cards = [{ kind = "network", tier = 3 }]
+      cards = [{ kind = "network", tier = 2 }]
     }
   }
 }

@@ -38,8 +38,8 @@ java -jar "$assembly_jar" \
 cat "$smoke_output"
 grep -Fq 'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2' "$smoke_output"
 grep -Fq 'BRAIN_NATIVE_LUA_AVAILABLE=true' "$smoke_output"
-grep -Fq 'BRAIN_EMPTY_SESSION_OPENED' "$smoke_output"
-grep -Fq 'BRAIN_EMPTY_SESSION_CLOSED' "$smoke_output"
+grep -Fq 'BRAIN_PROJECT_SESSION_OPENED' "$smoke_output"
+grep -Fq 'BRAIN_PROJECT_SESSION_CLOSED' "$smoke_output"
 grep -Fq 'BRAIN_LIFECYCLE_SHUTDOWN' "$smoke_output"
 grep -Fq 'HARNESS_NON_DAEMON_THREADS=0' "$smoke_output"
 printf '%s\n' 'PASS: packaged brain lifecycle smoke test'

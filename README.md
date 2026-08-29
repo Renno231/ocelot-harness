@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. The completed foundation milestone provides a reproducible Java 8/SBT build, clean pinned-brain integration, and process-global lifecycle ownership with one active empty project session. Five cohesive milestones build the remaining agent-facing control plane.
+Phase 1 architecture and implementation are approved. The completed foundation and project-construction milestones provide a reproducible Java 8/SBT build, clean pinned-brain integration, process-global lifecycle ownership, pure schema-v1 manifest validation, canonical host-path policy, and construction of one legal tier-3 computer/screen topology. Four cohesive milestones build the remaining agent-facing control plane.
 
 Start here:
 
@@ -59,7 +59,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke that opens and closes an empty session before shutdown.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke that constructs, describes, and closes a valid project before shutdown.
 
 ## License
 

@@ -36,7 +36,7 @@ final class RuntimeOwnerSpec extends AnyFunSuite with Matchers with EitherValues
       val hooks = new RecordingShutdownHooks
       val owner = RuntimeOwner.isolatedForTesting(lifecycle, hooks).start(config).value
       val projectRoot = Files.createDirectory(config.runtimeDirectory.resolve("hook-project"))
-      val session = owner.openProject(projectRoot).value
+      val session = owner.openEmptySessionForTesting(projectRoot).value
 
       hooks.runRegisteredHook()
       hooks.runRegisteredHook()
@@ -54,7 +54,7 @@ final class RuntimeOwnerSpec extends AnyFunSuite with Matchers with EitherValues
       val coordinator = RuntimeOwner.isolatedForTesting(lifecycle, new RecordingShutdownHooks)
       val owner = coordinator.start(config).value
       val projectRoot = Files.createDirectory(config.runtimeDirectory.resolve("project"))
-      val session = owner.openProject(projectRoot).value
+      val session = owner.openEmptySessionForTesting(projectRoot).value
       lifecycle.beforeShutdown = () => session.isClosed shouldBe true
 
       owner.close()
@@ -74,11 +74,11 @@ final class RuntimeOwnerSpec extends AnyFunSuite with Matchers with EitherValues
       val firstRoot = Files.createDirectory(config.runtimeDirectory.resolve("first-project"))
       val secondRoot = Files.createDirectory(config.runtimeDirectory.resolve("second-project"))
 
-      val first = owner.openProject(firstRoot).value
-      owner.openProject(secondRoot).left.value.code shouldBe "project_already_open"
+      val first = owner.openEmptySessionForTesting(firstRoot).value
+      owner.openEmptySessionForTesting(secondRoot).left.value.code shouldBe "project_already_open"
 
       first.close()
-      val second = owner.openProject(secondRoot).value
+      val second = owner.openEmptySessionForTesting(secondRoot).value
       second.projectRoot shouldBe secondRoot.toAbsolutePath.normalize()
 
       owner.close()

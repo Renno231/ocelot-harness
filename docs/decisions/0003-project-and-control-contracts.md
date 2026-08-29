@@ -43,3 +43,7 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 - Additive protocol fields remain optional within one major version.
 - Unknown hardware/security manifest keys are validation errors.
 - Snapshot metadata records harness, schema, protocol, and brain versions before restoration is attempted.
+
+## Verification
+
+Project construction parses schema version 1 into immutable typed models before creating brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, and Internet double opt-in. A forked real-brain test constructs and describes the approved tier-3 topology without exposing brain types or slot indexes.

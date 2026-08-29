@@ -43,8 +43,8 @@ final class RuntimeOwnerProcessSpec extends AnyFunSuite with Matchers {
         stdout.linesIterator.filter(_.nonEmpty).toVector shouldBe Vector(
           "BRAIN_LIFECYCLE_INITIALIZED version=0.24.2",
           "BRAIN_NATIVE_LUA_AVAILABLE=true",
-          "BRAIN_EMPTY_SESSION_OPENED",
-          "BRAIN_EMPTY_SESSION_CLOSED",
+          "BRAIN_PROJECT_SESSION_OPENED",
+          "BRAIN_PROJECT_SESSION_CLOSED",
           "BRAIN_LIFECYCLE_SHUTDOWN",
           "HARNESS_NON_DAEMON_THREADS=0"
         )

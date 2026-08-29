@@ -1,5 +1,7 @@
 package ocelot.harness.core
 
+import ocelot.harness.core.project.ProjectError
+
 sealed trait HarnessError extends Product with Serializable {
   def code: String
   def message: String
@@ -23,6 +25,12 @@ object HarnessError {
 
   final case class RuntimeInitializationFailed(message: String) extends HarnessError {
     override val code: String = "runtime_initialization_failed"
+  }
+
+  final case class ProjectValidationFailed(errors: Vector[ProjectError]) extends HarnessError {
+    override val code: String = "project_validation_failed"
+    override val message: String =
+      errors.map(error => s"${error.path}: ${error.message}").mkString("; ")
   }
 
   final case class ProjectOpenFailed(projectRoot: String, message: String) extends HarnessError {

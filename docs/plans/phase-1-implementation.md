@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — foundation milestone complete; project construction ready
+- **Status:** Approved — milestones 0 and 1 complete; interactive execution ready
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -27,8 +27,8 @@ edit host main.lua
 | Milestone | Outcome | Status |
 |---|---|---|
 | 0. Bootstrap/runtime foundation | Reproducible build and sole process-global runtime ownership | Complete |
-| 1. Project construction | Validated manifest becomes a legal live topology | Ready |
-| 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Planned |
+| 1. Project construction | Validated manifest becomes a legal live topology | Complete |
+| 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Ready |
 | 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Planned |
 | 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Planned |
 | 5. Hardening/release | Multi-device coverage and release evidence | Planned |
@@ -142,13 +142,16 @@ Implement `RuntimeOwner` and session lifecycle models from the architecture.
 
 A process can start the brain, open and close one empty workspace, and terminate without hanging.
 
-The runtime foundation added a concrete `RuntimeOwner`, core-owned first-party lifecycle errors/configuration, one-active-session enforcement, a single idempotent JVM shutdown hook, and a generated brain configuration that disables HTTP/TCP and filesystem buffering. The forked process proof requires stdout to contain only the ordered lifecycle evidence markers, keeps brain logging on stderr, closes the empty session before global shutdown, and reports no live non-daemon harness threads.
+The runtime foundation added a concrete `RuntimeOwner`, core-owned first-party lifecycle errors/configuration, one-active-session enforcement, a single idempotent JVM shutdown hook, and a generated brain configuration that disables HTTP/TCP and filesystem buffering. The forked process proof requires stdout to contain only ordered lifecycle evidence markers, keeps brain logging on stderr, closes the active session before global shutdown, and reports no live non-daemon harness threads.
 
 ## Milestone 1 — Project construction
 
-- **Status:** Ready
+- **Status:** Complete
+- **Verified profile:** Windows Temurin Java 8
 
 ### Project manifest, IDs, and host-path policy
+
+- **Status:** Complete
 
 #### Public behavior
 
@@ -181,6 +184,8 @@ Manifest validation is pure, deterministic, and performs no brain construction o
 
 ### Legal hardware catalog and workspace construction
 
+- **Status:** Complete
+
 #### Public behavior
 
 Implement the first hardware profile:
@@ -202,7 +207,7 @@ The manifest uses semantic roles. Brain inventory indexes remain private.
 - missing CPU, memory, GPU, or EEPROM reports a profile violation
 - excessive component count fails
 - incompatible component tier fails
-- duplicate semantic slot fails
+- singleton roles and bounded collections expose no duplicate or raw slot assignment
 - invalid connection endpoint/kind fails
 - host-backed disk receives canonical path and requested label
 - construction failure disposes all already-created entities
@@ -220,9 +225,11 @@ Tier 1, tier 2, creative, servers, racks, and broad addon coverage are added onl
 
 A versioned manifest resolves only policy-approved canonical paths, constructs one legal tier-3 computer and screen, and exposes a complete logical topology without public brain types, raw inventory indexes, or generated-address identity.
 
+The completed implementation keeps loading pure and deterministic, rejects unsupported schemas before field interpretation, returns stable multi-error validation, restricts includes and host paths to canonical policy-approved roots, and enforces Internet double opt-in. The private catalog owns tier-3 slot legality and partial-construction cleanup; a forked real-brain test proves canonical managed-disk paths and labels, stable logical topology, diagnostic runtime addresses, and reverse-order entity disposal. The packaged lifecycle smoke now constructs and describes a valid project before shutdown.
+
 ## Milestone 2 — Interactive execution
 
-- **Status:** Planned
+- **Status:** Ready
 
 ### Serialized simulation, machine state, and events
 
