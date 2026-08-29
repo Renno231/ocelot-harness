@@ -9,10 +9,11 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
-final class BrainLifecycleProbeSpec extends AnyFunSuite with Matchers {
+final class RuntimeOwnerProcessSpec extends AnyFunSuite with Matchers {
   test("the real brain initializes and shuts down in a bounded forked JVM") {
     val workDirectory = Files.createTempDirectory("ocelot-harness-brain-probe-")
-    val outputFile = workDirectory.resolve("probe.log")
+    val stdoutFile = workDirectory.resolve("stdout.log")
+    val stderrFile = workDirectory.resolve("stderr.log")
 
     try {
       val process = new ProcessBuilder(
@@ -20,10 +21,12 @@ final class BrainLifecycleProbeSpec extends AnyFunSuite with Matchers {
         "-cp",
         System.getProperty("java.class.path"),
         "ocelot.harness.app.BrainLifecycleProbe",
-        workDirectory.resolve("native-libraries").toString
+        workDirectory.resolve("native-libraries").toString,
+        workDirectory.resolve("runtime").toString,
+        workDirectory.resolve("project").toString
       )
-        .redirectErrorStream(true)
-        .redirectOutput(outputFile.toFile)
+        .redirectOutput(stdoutFile.toFile)
+        .redirectError(stderrFile.toFile)
         .start()
 
       val exited = process.waitFor(30L, TimeUnit.SECONDS)
@@ -32,13 +35,20 @@ final class BrainLifecycleProbeSpec extends AnyFunSuite with Matchers {
         process.waitFor(5L, TimeUnit.SECONDS)
       }
 
-      val output = new String(Files.readAllBytes(outputFile), StandardCharsets.UTF_8)
-      withClue(s"Forked probe output:\n$output\n") {
+      val stdout = new String(Files.readAllBytes(stdoutFile), StandardCharsets.UTF_8)
+      val stderr = new String(Files.readAllBytes(stderrFile), StandardCharsets.UTF_8)
+      withClue(s"Forked probe stdout:\n$stdout\nstderr:\n$stderr\n") {
         exited shouldBe true
         process.exitValue() shouldBe 0
-        output should include("BRAIN_LIFECYCLE_INITIALIZED version=0.24.2")
-        output should include("BRAIN_NATIVE_LUA_AVAILABLE=true")
-        output should include("BRAIN_LIFECYCLE_SHUTDOWN")
+        stdout.linesIterator.filter(_.nonEmpty).toVector shouldBe Vector(
+          "BRAIN_LIFECYCLE_INITIALIZED version=0.24.2",
+          "BRAIN_NATIVE_LUA_AVAILABLE=true",
+          "BRAIN_EMPTY_SESSION_OPENED",
+          "BRAIN_EMPTY_SESSION_CLOSED",
+          "BRAIN_LIFECYCLE_SHUTDOWN",
+          "HARNESS_NON_DAEMON_THREADS=0"
+        )
+        stderr should not include "BRAIN_"
       }
     } finally {
       deleteRecursively(workDirectory)

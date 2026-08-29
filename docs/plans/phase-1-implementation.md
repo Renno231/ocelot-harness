@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — Slice 0 complete; Slice 1 requires maintainer approval
+- **Status:** Approved — Slices 0 and 1 complete
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -100,6 +100,9 @@ The pinned source build is the authoritative dependency record. Slice 0 resolved
 
 ## Slice 1 — Process runtime ownership
 
+- **Status:** Complete
+- **Verified profile:** Windows Temurin Java 8
+
 ### Public behavior
 
 Implement `RuntimeOwner` and session lifecycle models from the architecture.
@@ -123,6 +126,8 @@ Implement `RuntimeOwner` and session lifecycle models from the architecture.
 ### Acceptance
 
 A process can start the brain, open and close one empty workspace, and terminate without hanging.
+
+Slice 1 added a concrete `RuntimeOwner`, core-owned first-party lifecycle errors/configuration, one-active-session enforcement, a single idempotent JVM shutdown hook, and a generated brain configuration that disables HTTP/TCP and filesystem buffering. The forked process proof requires stdout to contain only the ordered lifecycle evidence markers, keeps brain logging on stderr, closes the empty session before global shutdown, and reports no live non-daemon harness threads.
 
 ## Slice 2 — Project manifest, IDs, and host-path policy
 

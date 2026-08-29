@@ -566,7 +566,7 @@ scopt 4.1.0
 ScalaTest 3.2.19 (test)
 ```
 
-Slice 0 confirmed the toolchain, brain runtime graph, and ScalaTest version. Candidate feature versions are rechecked when the corresponding behavior is implemented.
+Slice 0 confirmed the toolchain, brain runtime graph, and ScalaTest version. Slice 1 declares Typesafe Config 1.4.4 directly for restrictive generated brain configuration. Remaining candidate feature versions are rechecked when their corresponding behavior is implemented.
 
 ## Module quality assessment
 

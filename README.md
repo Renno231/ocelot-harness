@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and its implementation plan are approved. Slice 0 is complete: the repository has a reproducible Java 8/SBT build, imports the pinned brain source without modifying it, and proves native Lua initialization and shutdown in a bounded forked process. Slice 1 requires maintainer approval.
+Phase 1 architecture and implementation are approved. Slices 0 and 1 provide a reproducible Java 8/SBT build, clean pinned-brain integration, and process-global lifecycle ownership with one active empty project session. Later slices build the agent-facing control plane incrementally.
 
 Start here:
 
@@ -59,7 +59,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke test.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke that opens and closes an empty session before shutdown.
 
 ## License
 

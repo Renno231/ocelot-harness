@@ -38,3 +38,7 @@ all waits bounded by ticks and wall time
 all session EventBus subscriptions cancelled on close
 all screen snapshots copied under screen synchronization
 ```
+
+## Verification
+
+Slice 1 places every direct `Ocelot.initialize()` and `Ocelot.shutdown()` call behind the concrete core `RuntimeOwner`. A forked real-brain process opens and closes one empty session before global shutdown; application code observes only first-party lifecycle models.

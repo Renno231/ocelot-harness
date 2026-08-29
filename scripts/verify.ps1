@@ -44,9 +44,11 @@ try {
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
     try {
         $nativeDirectory = Join-Path $smokeDirectory 'native-libraries'
+        $runtimeDirectory = Join-Path $smokeDirectory 'runtime'
+        $projectDirectory = Join-Path $smokeDirectory 'project'
         $savedErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        $smokeOutput = (& java -jar $assemblyJar $nativeDirectory 2>&1 | Out-String).Trim()
+        $smokeOutput = (& java -jar $assemblyJar $nativeDirectory $runtimeDirectory $projectDirectory 2>&1 | Out-String).Trim()
         $smokeExitCode = $LASTEXITCODE
         $ErrorActionPreference = $savedErrorActionPreference
         Write-Host $smokeOutput
@@ -56,7 +58,10 @@ try {
         foreach ($marker in @(
             'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2',
             'BRAIN_NATIVE_LUA_AVAILABLE=true',
-            'BRAIN_LIFECYCLE_SHUTDOWN'
+            'BRAIN_EMPTY_SESSION_OPENED',
+            'BRAIN_EMPTY_SESSION_CLOSED',
+            'BRAIN_LIFECYCLE_SHUTDOWN',
+            'HARNESS_NON_DAEMON_THREADS=0'
         )) {
             if (-not $smokeOutput.Contains($marker)) {
                 throw "Packaged smoke test output is missing marker: $marker"
