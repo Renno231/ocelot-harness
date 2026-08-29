@@ -175,12 +175,13 @@ Representative interface:
 ```scala
 trait HarnessSession extends AutoCloseable {
   def describe(): WorkspaceDescription
-  def startMachine(id: MachineId): Either[HarnessError, MachineState]
-  def stopMachine(id: MachineId): Either[HarnessError, MachineState]
-  def resetMachine(id: MachineId): Either[HarnessError, MachineState]
+  def startMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def run(request: RunRequest): Either[HarnessError, RunResult]
   def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
   def send(id: ScreenId, input: UserInput): Either[HarnessError, InputResult]
+  def recentEvents(): Either[HarnessError, EventSnapshot]
   def saveSnapshot(name: SnapshotName): Either[HarnessError, SnapshotDescription]
   def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription]
   def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
@@ -216,7 +217,7 @@ RunRequest(
   maxTicks: Int,
   maxWallTime: FiniteDuration,
   pace: TickPace,
-  captureOnFailure: Boolean
+  cancellation: RunCancellation
 )
 ```
 
@@ -230,7 +231,7 @@ Stop conditions include:
 - event predicate occurs
 - screen remains unchanged for a tick count
 
-Each run returns the stop reason, elapsed ticks, elapsed wall time, final machine states, and observation revisions. A timeout is a typed result with diagnostics, not an unbounded sleep or generic exception.
+Each run returns the stop reason, elapsed ticks, elapsed wall time, final machine states, screen revisions and snapshots, bounded recent events, and a bounded observation timeline. Event and timeline truncation is explicit through drop counts. A timeout is a typed result with diagnostics, not an unbounded sleep or generic exception. Accelerated pacing still yields to brain worker execution; fixed pacing checks cancellation and the wall budget in bounded intervals.
 
 ### ScreenSnapshot and ScreenRenderer
 
@@ -238,7 +239,7 @@ Each run returns the stop reason, elapsed ticks, elapsed wall time, final machin
 
 ```text
 logical screen ID
-runtime OC address
+optional diagnostic runtime OC address
 revision
 power state
 precision mode
@@ -528,7 +529,7 @@ The first real integration fixture uses:
 - one tier-3 computer
 - tier-3 CPU, GPU, two memory modules, managed host-backed HDD, and EEPROM
 - one tier-3 screen with keyboard
-- a small EEPROM bootloader that loads `/main.lua` from the project disk
+- the stock Lua BIOS plus a project-disk bootstrap that loads the fixture program
 - a Lua GUI that writes `READY`, reacts to touch, and displays clipboard input
 
 Acceptance sequence:

@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. The completed foundation and project-construction milestones provide a reproducible Java 8/SBT build, clean pinned-brain integration, process-global lifecycle ownership, pure schema-v1 manifest validation, canonical host-path policy, and construction of one legal tier-3 computer/screen topology. Four cohesive milestones build the remaining agent-facing control plane.
+Phase 1 architecture and implementation are approved. The completed foundation, project-construction, and interactive-execution milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable screen observations, emulated input, and a real host-edit → boot → interact → observe loop. Three cohesive milestones remain: artifacts/recovery, the external control plane, and release hardening.
 
 Start here:
 
@@ -20,18 +20,23 @@ Start here:
 3. [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
 4. [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Planned Phase 1 capabilities
+## Implemented capabilities
 
 - versioned HOCON project manifests with stable logical device IDs
-- validated OpenComputers hardware profiles
-- multiple computers, screens, keyboards, filesystems, and network connections
-- host-directory-backed managed disks
-- machine lifecycle and bounded simulation control
-- emulated user input
-- text, cell/color, and headless PNG screen capture
-- event collection, diagnostics, and snapshots
+- one validated tier-3 computer/screen hardware profile
+- host-directory-backed managed disks with canonical allowed-root policy
+- machine start, stop, reset, and condition-driven bounded simulation
+- immutable Unicode text/cell/color/palette screen snapshots
+- key, typed-text, paste, touch, drag, drop, and scroll input
+- bounded events and run-failure observations
+- an isolated real-brain vertical fixture under `fixtures/vertical-spike/`
+
+## Remaining Phase 1 capabilities
+
+- deterministic PNG artifacts, snapshots, and diagnostic bundles
+- broader multi-device and hardware-profile coverage
 - JSON-RPC over agent-owned stdio and authenticated loopback transport
-- a general CLI
+- the `ocelotctl` CLI and release hardening
 
 Ocelot Desktop canvas/window automation is outside Phase 1.
 
@@ -59,7 +64,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain lifecycle smoke that constructs, describes, and closes a valid project before shutdown.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain vertical smoke that boots the fixture, injects touch and paste, observes the screen, reloads a host-file edit, and shuts down without live harness threads.
 
 ## License
 

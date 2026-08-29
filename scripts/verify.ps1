@@ -46,6 +46,8 @@ try {
         $nativeDirectory = Join-Path $smokeDirectory 'native-libraries'
         $runtimeDirectory = Join-Path $smokeDirectory 'runtime'
         $projectDirectory = Join-Path $smokeDirectory 'project'
+        New-Item -ItemType Directory -Path $projectDirectory | Out-Null
+        Copy-Item -Path (Join-Path $repositoryRoot 'fixtures\vertical-spike\*') -Destination $projectDirectory -Recurse
         $savedErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $smokeOutput = (& java -jar $assemblyJar $nativeDirectory $runtimeDirectory $projectDirectory 2>&1 | Out-String).Trim()
@@ -59,6 +61,10 @@ try {
             'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2',
             'BRAIN_NATIVE_LUA_AVAILABLE=true',
             'BRAIN_PROJECT_SESSION_OPENED',
+            'BRAIN_VERTICAL_READY=true',
+            'BRAIN_VERTICAL_TOUCH=true',
+            'BRAIN_VERTICAL_PASTE=true',
+            'BRAIN_VERTICAL_HOST_EDIT=true',
             'BRAIN_PROJECT_SESSION_CLOSED',
             'BRAIN_LIFECYCLE_SHUTDOWN',
             'HARNESS_NON_DAEMON_THREADS=0'
@@ -67,7 +73,7 @@ try {
                 throw "Packaged smoke test output is missing marker: $marker"
             }
         }
-        Write-Host 'PASS: packaged brain lifecycle smoke test'
+        Write-Host 'PASS: packaged vertical brain smoke test'
     } finally {
         Remove-Item -LiteralPath $smokeDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }

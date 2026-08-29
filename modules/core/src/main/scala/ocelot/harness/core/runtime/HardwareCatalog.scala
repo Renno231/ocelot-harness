@@ -22,6 +22,13 @@ import totoro.ocelot.brain.workspace.Workspace
 import ocelot.harness.core.project._
 import ocelot.harness.core.workspace._
 
+private[runtime] final case class ConstructedWorkspace(
+    description: WorkspaceDescription,
+    computers: Map[ComputerId, BrainCase],
+    screens: Map[ScreenId, Screen],
+    keyboards: Map[ScreenId, Keyboard]
+)
+
 private[runtime] object HardwareCatalog {
   private object TierThreeSlots {
     val Gpu = 0
@@ -32,7 +39,7 @@ private[runtime] object HardwareCatalog {
     val Eeprom = 9
   }
 
-  def construct(project: ValidatedProject, workspace: Workspace): WorkspaceDescription = {
+  def construct(project: ValidatedProject, workspace: Workspace): ConstructedWorkspace = {
     val added = ArrayBuffer.empty[Entity]
 
     def add[T <: Entity](entity: T): T = {
@@ -144,7 +151,12 @@ private[runtime] object HardwareCatalog {
       }
 
       val computers = constructedComputers.map { case (_, _, description) => description }
-      WorkspaceDescription(project.id, computers, screens, project.connections)
+      ConstructedWorkspace(
+        WorkspaceDescription(project.id, computers, screens, project.connections),
+        computersById,
+        screensById.view.mapValues(_._1).toMap,
+        screensById.collect { case (id, (_, Some(keyboard))) => id -> keyboard }
+      )
     } catch {
       case NonFatal(error) =>
         added.reverseIterator.foreach { entity =>

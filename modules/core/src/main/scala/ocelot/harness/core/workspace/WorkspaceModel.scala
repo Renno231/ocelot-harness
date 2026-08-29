@@ -2,6 +2,7 @@ package ocelot.harness.core.workspace
 
 import java.nio.file.Path
 
+import ocelot.harness.core.HarnessError
 import ocelot.harness.core.project.{
   CardKind,
   ComputerId,
@@ -78,4 +79,11 @@ final case class WorkspaceDescription(
 
 trait HarnessSession extends AutoCloseable {
   def describe(): WorkspaceDescription
+  def startMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def run(request: RunRequest): Either[HarnessError, RunResult]
+  def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
+  def send(id: ScreenId, input: UserInput): Either[HarnessError, InputResult]
+  def recentEvents(): Either[HarnessError, EventSnapshot]
 }

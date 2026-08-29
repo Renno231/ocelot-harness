@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — milestones 0 and 1 complete; interactive execution ready
+- **Status:** Approved — milestones 0 through 2 complete; artifacts and recovery ready
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -28,7 +28,7 @@ edit host main.lua
 |---|---|---|
 | 0. Bootstrap/runtime foundation | Reproducible build and sole process-global runtime ownership | Complete |
 | 1. Project construction | Validated manifest becomes a legal live topology | Complete |
-| 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Ready |
+| 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Complete |
 | 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Planned |
 | 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Planned |
 | 5. Hardening/release | Multi-device coverage and release evidence | Planned |
@@ -229,7 +229,7 @@ The completed implementation keeps loading pure and deterministic, rejects unsup
 
 ## Milestone 2 — Interactive execution
 
-- **Status:** Ready
+- **Status:** Complete
 
 ### Serialized simulation, machine state, and events
 
@@ -300,12 +300,13 @@ Create `fixtures/vertical-spike/` containing:
 
 ```text
 ocelot-harness.conf
+init.lua
 computer/main.lua
 firmware/project-loader.lua
 expected/
 ```
 
-The EEPROM loader locates the filesystem labeled `project`, loads `/main.lua`, reports boot errors on the screen, and executes it. The GUI fixture reacts to touch and clipboard signals.
+The stock Lua BIOS boots `init.lua`; that bootstrap loads `firmware/project-loader.lua`, which executes `computer/main.lua` from the filesystem labeled `project`. The GUI fixture reports boot failures on screen and reacts to touch and clipboard signals.
 
 #### Tests first
 
@@ -324,6 +325,8 @@ This vertical-spike capability satisfies the Phase 1 technical go/no-go gate. St
 ### Milestone acceptance
 
 A host-file edit can be booted, driven through bounded condition waits, touched and pasted into through emulated input, observed through immutable screen state, reset, and rerun against real ocelot-brain with bounded failure diagnostics.
+
+The completed implementation exposes one brain-free `HarnessSession` surface backed by a bounded single-thread lane. Real-brain tests prove typed machine lifecycle, tick and wall-clock timeouts, responsive cancellation, bounded event and timeline buffers with drop counts, immutable Unicode cell/color/palette snapshots, one-based touch coordinates, ordered drag semantics, typed text and Ocelot clipboard splitting, isolated fixture copies, and host-edit reset behavior. Canonical verification packages the same fixture and proves `READY`, touch, paste, host-edit reload, runtime shutdown, and zero live harness threads.
 
 ## Milestone 3 — Artifacts and recovery
 

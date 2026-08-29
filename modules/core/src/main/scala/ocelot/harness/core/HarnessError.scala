@@ -36,4 +36,35 @@ object HarnessError {
   final case class ProjectOpenFailed(projectRoot: String, message: String) extends HarnessError {
     override val code: String = "project_open_failed"
   }
+
+  case object SessionClosed extends HarnessError {
+    override val code: String = "session_closed"
+    override val message: String = "the project session is closed"
+  }
+
+  final case class UnknownComputer(id: String) extends HarnessError {
+    override val code: String = "unknown_computer"
+    override val message: String = s"unknown computer: $id"
+  }
+
+  final case class UnknownScreen(id: String) extends HarnessError {
+    override val code: String = "unknown_screen"
+    override val message: String = s"unknown screen: $id"
+  }
+
+  final case class InvalidRunRequest(message: String) extends HarnessError {
+    override val code: String = "invalid_run_request"
+  }
+
+  final case class InvalidInput(message: String) extends HarnessError {
+    override val code: String = "invalid_input"
+  }
+
+  final case class InputUnavailable(message: String) extends HarnessError {
+    override val code: String = "input_unavailable"
+  }
+
+  final case class SessionOperationFailed(message: String) extends HarnessError {
+    override val code: String = "session_operation_failed"
+  }
 }

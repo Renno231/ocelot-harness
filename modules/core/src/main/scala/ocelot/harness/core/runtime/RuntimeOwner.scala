@@ -43,15 +43,27 @@ final class RuntimeOwner private[runtime] (
         case Right(project) =>
           try {
             val workspace = new Workspace(project.paths.projectRoot)
-            val description = HardwareCatalog.construct(project, workspace)
-            val session = new BrainSession(
-              project.paths.projectRoot,
-              workspace,
-              Some(description),
-              sessionClosed
-            )
-            activeSession = Some(session)
-            Right(session)
+            try {
+              val constructed = HardwareCatalog.construct(project, workspace)
+              val session = new BrainSession(
+                project.paths.projectRoot,
+                workspace,
+                Some(project),
+                Some(constructed),
+                sessionClosed
+              )
+              activeSession = Some(session)
+              Right(session)
+            } catch {
+              case NonFatal(error) =>
+                workspace.getEntitiesIter.toVector.reverse.foreach { entity =>
+                  try workspace.remove(entity)
+                  catch {
+                    case NonFatal(_) =>
+                  }
+                }
+                throw error
+            }
           } catch {
             case NonFatal(error) =>
               Left(ProjectOpenFailed(project.paths.projectRoot.toString, errorMessage(error)))
@@ -72,6 +84,7 @@ final class RuntimeOwner private[runtime] (
         val session = new BrainSession(
           projectRoot,
           new Workspace(projectRoot),
+          None,
           None,
           sessionClosed
         )

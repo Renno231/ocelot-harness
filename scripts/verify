@@ -31,6 +31,8 @@ fi
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
 smoke_output="$smoke_directory/output.log"
+mkdir -p "$smoke_directory/project"
+cp -R fixtures/vertical-spike/. "$smoke_directory/project/"
 java -jar "$assembly_jar" \
   "$smoke_directory/native-libraries" \
   "$smoke_directory/runtime" \
@@ -39,7 +41,11 @@ cat "$smoke_output"
 grep -Fq 'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2' "$smoke_output"
 grep -Fq 'BRAIN_NATIVE_LUA_AVAILABLE=true' "$smoke_output"
 grep -Fq 'BRAIN_PROJECT_SESSION_OPENED' "$smoke_output"
+grep -Fq 'BRAIN_VERTICAL_READY=true' "$smoke_output"
+grep -Fq 'BRAIN_VERTICAL_TOUCH=true' "$smoke_output"
+grep -Fq 'BRAIN_VERTICAL_PASTE=true' "$smoke_output"
+grep -Fq 'BRAIN_VERTICAL_HOST_EDIT=true' "$smoke_output"
 grep -Fq 'BRAIN_PROJECT_SESSION_CLOSED' "$smoke_output"
 grep -Fq 'BRAIN_LIFECYCLE_SHUTDOWN' "$smoke_output"
 grep -Fq 'HARNESS_NON_DAEMON_THREADS=0' "$smoke_output"
-printf '%s\n' 'PASS: packaged brain lifecycle smoke test'
+printf '%s\n' 'PASS: packaged vertical brain smoke test'
