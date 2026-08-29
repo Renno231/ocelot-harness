@@ -27,7 +27,9 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 - Internet Card HTTP and TCP are disabled by the harness brain configuration by default.
 - Enabling either requires both an explicit service policy and an explicit project request.
 - The persistent control service binds to `127.0.0.1` only.
-- Each run uses a cryptographically random authentication token.
+- Each run uses a cryptographically random 256-bit authentication token.
+- Connection metadata is published atomically with owner-only filesystem permissions.
+- Project locks and process-instance identity checks protect stale cleanup and forced termination.
 - Tokens are excluded from ordinary logs, diagnostics, and command output.
 
 ### Resource limits

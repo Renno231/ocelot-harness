@@ -29,7 +29,7 @@ submodule pin
 → real-brain integration tests
 → process/protocol tests
 → assembly
-→ packaged vertical smoke test
+→ packaged stdio protocol vertical smoke test
 ```
 
 ## Consequences

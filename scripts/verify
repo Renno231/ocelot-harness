@@ -30,26 +30,42 @@ fi
 
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
-smoke_output="$smoke_directory/output.log"
-mkdir -p "$smoke_directory/project"
-cp -R fixtures/vertical-spike/. "$smoke_directory/project/"
-java -jar "$assembly_jar" \
-  "$smoke_directory/native-libraries" \
-  "$smoke_directory/runtime" \
-  "$smoke_directory/project" >"$smoke_output" 2>&1
-cat "$smoke_output"
-grep -Fq 'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2' "$smoke_output"
-grep -Fq 'BRAIN_NATIVE_LUA_AVAILABLE=true' "$smoke_output"
-grep -Fq 'BRAIN_PROJECT_SESSION_OPENED' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_READY=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_PNG=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_SNAPSHOT=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_TOUCH=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_RESTORE=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_PASTE=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_HOST_EDIT=true' "$smoke_output"
-grep -Fq 'BRAIN_VERTICAL_DIAGNOSTICS=true' "$smoke_output"
-grep -Fq 'BRAIN_PROJECT_SESSION_CLOSED' "$smoke_output"
-grep -Fq 'BRAIN_LIFECYCLE_SHUTDOWN' "$smoke_output"
-grep -Fq 'HARNESS_NON_DAEMON_THREADS=0' "$smoke_output"
-printf '%s\n' 'PASS: packaged vertical brain smoke test'
+protocol_input="$smoke_directory/input.ndjson"
+protocol_output="$smoke_directory/stdout.ndjson"
+service_log="$smoke_directory/stderr.log"
+project_directory="$smoke_directory/project with spaces"
+mkdir -p "$project_directory"
+cp -R fixtures/vertical-spike/. "$project_directory/"
+cat >"$protocol_input" <<'EOF'
+{"jsonrpc":"2.0","id":1,"method":"harness.version","params":{"protocolMajor":1}}
+{"jsonrpc":"2.0","id":2,"method":"workspace.describe"}
+{"jsonrpc":"2.0","id":3,"method":"machine.start","params":{"computerId":"main"}}
+{"jsonrpc":"2.0","id":4,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"READY"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":5,"method":"screen.capture","params":{"screenId":"main","path":"screens/packaged-protocol.png","format":"png"}}
+{"jsonrpc":"2.0","id":6,"method":"snapshot.save","params":{"name":"packaged-ready"}}
+{"jsonrpc":"2.0","id":7,"method":"screen.input","params":{"screenId":"main","input":{"type":"touch","x":1,"y":1}}}
+{"jsonrpc":"2.0","id":8,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"TOUCHED"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":9,"method":"snapshot.load","params":{"name":"packaged-ready"}}
+{"jsonrpc":"2.0","id":10,"method":"screen.input","params":{"screenId":"main","input":{"type":"paste","text":"PACKAGED-SMOKE"}}}
+{"jsonrpc":"2.0","id":11,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"PACKAGED-SMOKE"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":12,"method":"diagnostics.collect","params":{"path":"diagnostics/packaged-protocol.zip"}}
+{"jsonrpc":"2.0","id":13,"method":"service.shutdown"}
+EOF
+java -jar "$assembly_jar" serve --stdio --project "$project_directory" \
+  <"$protocol_input" >"$protocol_output" 2>"$service_log"
+if [ -s "$service_log" ]; then
+  cat "$service_log" >&2
+fi
+[ "$(grep -c '"jsonrpc":"2.0"' "$protocol_output")" -eq 13 ]
+if grep -Fq '"error"' "$protocol_output"; then
+  printf '%s\n' 'ERROR: packaged protocol smoke returned an error' >&2
+  exit 1
+fi
+awk 'index($0, "{\"jsonrpc\":\"2.0\"") != 1 { exit 1 }' "$protocol_output"
+grep -Fq '"protocolMajor":1' "$protocol_output"
+grep -Fq '"projectId":"vertical-spike"' "$protocol_output"
+grep -Fq '"type":"condition_satisfied"' "$protocol_output"
+grep -Fq '"relativePath":"screens/packaged-protocol.png"' "$protocol_output"
+grep -Fq '"relativePath":"diagnostics/packaged-protocol.zip"' "$protocol_output"
+grep -Fq '"shuttingDown":true' "$protocol_output"
+printf '%s\n' 'PASS: packaged stdio protocol vertical smoke test'

@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 architecture and implementation are approved. The completed foundation, project-construction, interactive-execution, and artifacts/recovery milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable screen observations, emulated input, deterministic captures, transactional snapshots, and bounded diagnostics. Two cohesive milestones remain: the external control plane and release hardening.
+Phase 1 architecture and implementation are approved. The completed foundation, project-construction, interactive-execution, artifacts/recovery, and external-control-plane milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, schema-v1 project construction, serialized bounded simulation, immutable observations and input, deterministic artifacts and recovery, versioned JSON-RPC, authenticated loopback service ownership, and a general CLI. Release hardening is the remaining milestone.
 
 Start here:
 
@@ -32,13 +32,16 @@ Start here:
 - atomic text, cells JSON, and deterministic headless PNG artifacts
 - compatible, bounded workspace snapshots with non-destructive transactional restore
 - checksummed diagnostic bundles with redacted project paths and disk sources
+- JSON-RPC 2.0 protocol-major handshake and bounded newline framing
+- agent-owned stdio with protocol-only stdout
+- authenticated `127.0.0.1` service ownership with atomic connection metadata
+- `ocelot-harnessd` lifecycle commands and `ocelotctl` machine, screen, snapshot, and diagnostic commands
 - an isolated real-brain vertical fixture under `fixtures/vertical-spike/`
 
 ## Remaining Phase 1 capabilities
 
 - broader multi-device and hardware-profile coverage
-- JSON-RPC over agent-owned stdio and authenticated loopback transport
-- the `ocelotctl` CLI and release hardening
+- cross-platform release evidence and distribution hardening
 
 Ocelot Desktop canvas/window automation is outside Phase 1.
 
@@ -66,7 +69,7 @@ scripts/verify          # POSIX shell or Git Bash
 scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
-The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged real-brain vertical smoke that boots the fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, reloads a host-file edit, emits diagnostics, and shuts down without live harness threads.
+The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
 
 ## License
 

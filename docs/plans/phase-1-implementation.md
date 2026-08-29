@@ -1,6 +1,6 @@
 # Ocelot Harness Phase 1 implementation plan
 
-- **Status:** Approved — milestones 0 through 3 complete; external control plane ready
+- **Status:** Approved — milestones 0 through 4 complete; release hardening ready
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Dependency:** ocelot-brain `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
@@ -30,7 +30,7 @@ edit host main.lua
 | 1. Project construction | Validated manifest becomes a legal live topology | Complete |
 | 2. Interactive execution | Bounded run/input/observation through the host-backed vertical loop | Complete |
 | 3. Artifacts/recovery | Deterministic captures, snapshots, and diagnostics | Complete |
-| 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Planned |
+| 4. External control plane | Versioned stdio/loopback RPC, service lifecycle, and CLI | Complete |
 | 5. Hardening/release | Multi-device coverage and release evidence | Planned |
 
 Each milestone is one cohesive delivery unit. Its capability sections are test and acceptance checklists, not independent stop/verify/commit cycles.
@@ -389,7 +389,7 @@ The completed implementation parses the pinned OpenComputers font into a pure he
 
 ## Milestone 4 — External control plane
 
-- **Status:** Planned
+- **Status:** Complete
 
 ### Versioned JSON-RPC and agent-owned stdio
 
@@ -471,6 +471,8 @@ All commands address the same running session.
 ### Milestone acceptance
 
 Agent-owned stdio and an authenticated loopback service expose the same versioned transport-neutral control contract; the CLI drives one persistent project session without protocol/log stream contamination.
+
+Verification covers strict JSON-RPC framing and errors, safe request IDs and lossless decimal-string int64 fields, protocol-major handshake, bounded messages and execution requests, constant-time token authentication, owner-only atomic metadata, verified project ownership and stale cleanup, loopback-only binding, persistent concurrent CLI access, stable exit categories, graceful and identity-checked forced shutdown, paths containing spaces, and a packaged real-brain stdio vertical smoke. UJSON 3.3.1 is the app module's direct MIT-licensed JSON dependency.
 
 ## Milestone 5 — Multi-device coverage and release hardening
 

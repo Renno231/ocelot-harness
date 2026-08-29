@@ -264,8 +264,11 @@ It parses the OpenComputers `font.hex` resource into 8×16 and 16×16 glyphs, re
 
 - JSON-RPC version: `2.0`
 - protocol major version: `1`
-- messages are UTF-8 JSON, one message per line for stream transports
-- IDs are strings or integers as permitted by JSON-RPC
+- messages are UTF-8 JSON, one message per line for stream transports, with a 1,048,576-character frame ceiling
+- IDs are strings or safe JSON integers as permitted by JSON-RPC
+- 64-bit counters, byte sizes, revisions, and ticks are decimal strings so clients never lose integer precision
+- each connection completes a protocol-major handshake before commands; loopback also authenticates with a constant-time token comparison
+- protocol execution requests cap one run at 10,000,000 ticks and 300,000 milliseconds
 - protocol errors and harness domain errors have separate stable codes
 - mutating methods return resulting state and observation revision
 - large binary artifacts are written beneath the project artifact root and returned by path plus checksum
@@ -417,9 +420,9 @@ ocelotctl ...
 ocelot-harnessd down
 ```
 
-Separate CLI invocations require a persistent attachable transport; stdio cannot provide that. Loopback mode binds an operating-system-assigned port on `127.0.0.1` only and writes connection metadata beneath `.ocelot-harness/run/`. The metadata contains process ID, port, protocol version, project identity, and a randomly generated session token. Every connection authenticates before commands are accepted.
+Separate CLI invocations require a persistent attachable transport; stdio cannot provide that. Loopback mode binds an operating-system-assigned port on `127.0.0.1` only and writes owner-only connection metadata atomically beneath `.ocelot-harness/run/`. The metadata contains process ID and start time, instance identity, port, protocol version, project identity, and a 256-bit random session token. Every connection authenticates before commands are accepted.
 
-The runtime refuses a second live owner for the same project. Stale metadata is verified against process identity before cleanup.
+A project file lock protects both stdio and loopback ownership. The runtime refuses a second live owner for the same project. Stale metadata is removed only when it matches the prior locked owner identity, and forced termination first verifies that the live lock identity still matches the metadata.
 
 ## Error model
 

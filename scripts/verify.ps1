@@ -43,41 +43,69 @@ try {
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
     try {
-        $nativeDirectory = Join-Path $smokeDirectory 'native-libraries'
-        $runtimeDirectory = Join-Path $smokeDirectory 'runtime'
-        $projectDirectory = Join-Path $smokeDirectory 'project'
+        $projectDirectory = Join-Path $smokeDirectory 'project with spaces'
         New-Item -ItemType Directory -Path $projectDirectory | Out-Null
         Copy-Item -Path (Join-Path $repositoryRoot 'fixtures\vertical-spike\*') -Destination $projectDirectory -Recurse
-        $savedErrorActionPreference = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        $smokeOutput = (& java -jar $assemblyJar $nativeDirectory $runtimeDirectory $projectDirectory 2>&1 | Out-String).Trim()
-        $smokeExitCode = $LASTEXITCODE
-        $ErrorActionPreference = $savedErrorActionPreference
-        Write-Host $smokeOutput
-        if ($smokeExitCode -ne 0) {
-            throw "Packaged smoke test failed with exit code $smokeExitCode"
+        $protocolInput = @'
+{"jsonrpc":"2.0","id":1,"method":"harness.version","params":{"protocolMajor":1}}
+{"jsonrpc":"2.0","id":2,"method":"workspace.describe"}
+{"jsonrpc":"2.0","id":3,"method":"machine.start","params":{"computerId":"main"}}
+{"jsonrpc":"2.0","id":4,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"READY"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":5,"method":"screen.capture","params":{"screenId":"main","path":"screens/packaged-protocol.png","format":"png"}}
+{"jsonrpc":"2.0","id":6,"method":"snapshot.save","params":{"name":"packaged-ready"}}
+{"jsonrpc":"2.0","id":7,"method":"screen.input","params":{"screenId":"main","input":{"type":"touch","x":1,"y":1}}}
+{"jsonrpc":"2.0","id":8,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"TOUCHED"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":9,"method":"snapshot.load","params":{"name":"packaged-ready"}}
+{"jsonrpc":"2.0","id":10,"method":"screen.input","params":{"screenId":"main","input":{"type":"paste","text":"PACKAGED-SMOKE"}}}
+{"jsonrpc":"2.0","id":11,"method":"simulation.run","params":{"condition":{"type":"screen_contains","screenId":"main","text":"PACKAGED-SMOKE"},"maxTicks":2000,"timeoutMillis":10000}}
+{"jsonrpc":"2.0","id":12,"method":"diagnostics.collect","params":{"path":"diagnostics/packaged-protocol.zip"}}
+{"jsonrpc":"2.0","id":13,"method":"service.shutdown"}
+'@
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = 'java'
+        $startInfo.Arguments = "-jar `"$assemblyJar`" serve --stdio --project `"$projectDirectory`""
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) {
+            throw 'Unable to start packaged protocol smoke process'
         }
-        foreach ($marker in @(
-            'BRAIN_LIFECYCLE_INITIALIZED version=0.24.2',
-            'BRAIN_NATIVE_LUA_AVAILABLE=true',
-            'BRAIN_PROJECT_SESSION_OPENED',
-            'BRAIN_VERTICAL_READY=true',
-            'BRAIN_VERTICAL_PNG=true',
-            'BRAIN_VERTICAL_SNAPSHOT=true',
-            'BRAIN_VERTICAL_TOUCH=true',
-            'BRAIN_VERTICAL_RESTORE=true',
-            'BRAIN_VERTICAL_PASTE=true',
-            'BRAIN_VERTICAL_HOST_EDIT=true',
-            'BRAIN_VERTICAL_DIAGNOSTICS=true',
-            'BRAIN_PROJECT_SESSION_CLOSED',
-            'BRAIN_LIFECYCLE_SHUTDOWN',
-            'HARNESS_NON_DAEMON_THREADS=0'
-        )) {
-            if (-not $smokeOutput.Contains($marker)) {
-                throw "Packaged smoke test output is missing marker: $marker"
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.WriteLine($protocolInput)
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw 'Packaged protocol smoke process exceeded 60 seconds'
+        }
+        $protocolOutput = $stdoutTask.Result.Trim()
+        $serviceLog = $stderrTask.Result.Trim()
+        if ($serviceLog) {
+            [Console]::Error.WriteLine($serviceLog)
+        }
+        if ($process.ExitCode -ne 0) {
+            throw "Packaged protocol smoke failed with exit code $($process.ExitCode)"
+        }
+        $frames = @($protocolOutput -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+        if ($frames.Count -ne 13) {
+            throw "Packaged protocol smoke returned $($frames.Count) frames instead of 13"
+        }
+        foreach ($frame in $frames) {
+            if ($frame.jsonrpc -ne '2.0' -or $frame.PSObject.Properties.Name -contains 'error') {
+                throw "Invalid packaged protocol response: $($frame | ConvertTo-Json -Compress)"
             }
         }
-        Write-Host 'PASS: packaged vertical brain smoke test'
+        if (($frames | Where-Object { $_.id -eq 2 }).result.projectId -ne 'vertical-spike' -or
+            ($frames | Where-Object { $_.id -eq 4 }).result.stopReason.type -ne 'condition_satisfied' -or
+            ($frames | Where-Object { $_.id -eq 5 }).result.relativePath -ne 'screens/packaged-protocol.png' -or
+            ($frames | Where-Object { $_.id -eq 12 }).result.artifact.relativePath -ne 'diagnostics/packaged-protocol.zip' -or
+            -not ($frames | Where-Object { $_.id -eq 13 }).result.shuttingDown) {
+            throw 'Packaged protocol smoke responses are incomplete'
+        }
+        Write-Host 'PASS: packaged stdio protocol vertical smoke test'
     } finally {
         Remove-Item -LiteralPath $smokeDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }
