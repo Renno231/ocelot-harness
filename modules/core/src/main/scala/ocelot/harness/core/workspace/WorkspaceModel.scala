@@ -31,6 +31,7 @@ object ComponentRole {
   case object Eeprom extends ComponentRole {
     override val name: String = "eeprom"
   }
+  final case class Other(override val name: String) extends ComponentRole
 }
 
 final case class ComponentDescription(
@@ -60,7 +61,8 @@ final case class ComputerDescription(
     runtimeAddress: String,
     components: Vector[ComponentDescription],
     disks: Vector[DiskDescription],
-    cards: Vector[CardDescription]
+    cards: Vector[CardDescription],
+    kind: String = "computer"
 )
 
 final case class ScreenDescription(
@@ -71,11 +73,20 @@ final case class ScreenDescription(
     keyboardRuntimeAddress: Option[String]
 )
 
+final case class DeviceDescription(
+    id: String,
+    kind: String,
+    tier: Option[Int],
+    runtimeAddress: Option[String]
+)
+
 final case class WorkspaceDescription(
     projectId: ProjectId,
     computers: Vector[ComputerDescription],
     screens: Vector[ScreenDescription],
-    connections: Vector[ConnectionDefinition]
+    connections: Vector[ConnectionDefinition],
+    devices: Vector[DeviceDescription] = Vector.empty,
+    deviceConnections: Vector[(String, String)] = Vector.empty
 )
 
 trait HarnessSession extends AutoCloseable {

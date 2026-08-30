@@ -56,16 +56,29 @@ try {
 
     $cliHelp = (& "$scriptDirectory\ocelotctl.cmd" --help | Out-String)
     if ($LASTEXITCODE -ne 0 -or
+        $cliHelp -notmatch 'project init' -or
         $cliHelp -notmatch 'project inspect-desktop' -or
         $cliHelp -notmatch 'project import-desktop' -or
         $cliHelp -notmatch 'project validate') {
         throw 'Packaged local project commands are unavailable'
     }
-    Write-Host 'PASS: packaged Desktop project commands'
+    Write-Host 'PASS: packaged local project commands'
 
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
     try {
+        $generatedProject = Join-Path $smokeDirectory 'generated project with spaces'
+        $initResult = (& "$scriptDirectory\ocelotctl.cmd" project init $generatedProject --template single-computer --json | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or ($initResult | ConvertFrom-Json).template -ne 'single-computer') {
+            throw 'Packaged project initialization failed'
+        }
+        $validationResult = (& "$scriptDirectory\ocelotctl.cmd" --project $generatedProject project validate --json | Out-String).Trim()
+        $validation = $validationResult | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or $validation.schemaVersion -ne 2 -or $validation.workspaceKind -ne 'manifest') {
+            throw 'Packaged generated-project validation failed'
+        }
+        Write-Host 'PASS: packaged schema-v2 project initialization and validation'
+
         $projectDirectory = Join-Path $smokeDirectory 'project with spaces'
         New-Item -ItemType Directory -Path $projectDirectory | Out-Null
         Copy-Item -Path (Join-Path $repositoryRoot 'fixtures\vertical-spike\*') -Destination $projectDirectory -Recurse

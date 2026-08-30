@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. Workspace-expansion Stage 1 now imports compatible Ocelot Desktop workspaces; broader deterministic schema-v2 construction and continuous configurable simulation time remain approved follow-on stages.
+Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. Workspace-expansion Stages 1–2 add compatible Ocelot Desktop import plus deterministic schema-v2 construction and project authoring; continuous configurable simulation time remains the final approved expansion stage.
 
 Start here:
 
@@ -26,7 +26,10 @@ Start here:
 - versioned HOCON project manifests with stable logical device IDs
 - bounded import of compatible Ocelot Desktop workspaces with complete brain-graph preservation
 - deterministic label/UUID identity binding across reopen and snapshot restore
-- validated tier-1, tier-2, and tier-3 computer/screen profiles with service-owned topology caps
+- schema-v2 construction of cases, screens/keyboards, racks/servers, disk drives/floppies, RAID, holograms, note blocks, microcontrollers, relays, and cables
+- semantic legal inventories covering processors, memory, graphics, EEPROMs, buses, storage, and supported cards
+- typed device/port topology with service-owned device, inventory, connection, computer, screen, and storage caps
+- local runnable project templates for single-computer, two-computer, rack/server, and mixed-network environments
 - host-directory-backed managed disks with canonical allowed-root policy
 - machine start, stop, reset, and condition-driven bounded simulation
 - immutable Unicode text/cell/color/palette screen snapshots
@@ -43,7 +46,7 @@ Start here:
 - an isolated vertical fixture and forked real-brain multi-device integration project
 - independent computers, screens, host disks, targeted input paths, diagnostics, and configured network connectivity
 - exact harness/brain commit identity in packaged protocol responses
-- checked-in [CLI reference](docs/reference/cli.md), [Desktop import guide](docs/reference/desktop-import.md), [live-viewer guide](docs/reference/viewer.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
+- checked-in [CLI reference](docs/reference/cli.md), [manifest-v2 reference](docs/reference/manifest-v2.md), [Desktop import guide](docs/reference/desktop-import.md), [live-viewer guide](docs/reference/viewer.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
 
 The optional viewer renders and controls emulated screens only. Ocelot Desktop canvas/window automation remains outside the harness.
 
@@ -72,6 +75,18 @@ scripts\verify.cmd      # Windows Command Prompt or PowerShell
 ```
 
 The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, packaged viewer entrypoint, exact build identity, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
+
+## Create a deterministic project
+
+Generate a runnable schema-v2 project without manually writing hardware topology:
+
+```text
+scripts\ocelotctl.cmd project init demo --template mixed-network
+scripts\ocelotctl.cmd --project demo project validate
+scripts\ocelot-harnessd.cmd up --project demo
+```
+
+See the [manifest-v2 reference](docs/reference/manifest-v2.md) for supported devices, semantic inventories, typed ports, and security bounds.
 
 ## Import a Desktop workspace
 

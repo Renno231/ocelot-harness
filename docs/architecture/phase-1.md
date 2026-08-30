@@ -212,7 +212,7 @@ The actual class is concrete and package-private where possible. Public models d
 
 The catalog owns case-tier slot counts, accepted component kinds, component-tier limits, required hardware, connection rules, and the mapping to brain inventory indexes. Manifest callers select semantic roles such as `cpu`, `memory`, `gpu`, `disk`, and `card`; they never select raw brain slot integers.
 
-The accepted Phase 1 profiles cover tier-1, tier-2, and tier-3 computers and screens, with case-specific CPU, GPU, memory, disk, and card limits. Creative hardware, servers, racks, and additional entity kinds require separate profile approval.
+Schema v1 retains the accepted tier-1, tier-2, and tier-3 computer/screen profiles. Schema v2 extends the same private catalog to cases, screens/keyboards, racks/servers, disk drives/floppies, RAID, holograms, note blocks, microcontrollers, relays, and cables. Semantic inventories cover legal CPU/APU, memory, GPU, EEPROM, component bus, managed/unmanaged media, and supported network, wireless, linked, data, redstone, and Internet cards. Typed `device:port` edges validate rack mounts, cardinal sides, multiplicity, tiers, slots, and service caps before construction. Internet cards still require service and manifest double opt-in. Harness snapshots bind the constructed graph through private entity identities while public descriptions remain logical and brain-free.
 
 ### SimulationController
 

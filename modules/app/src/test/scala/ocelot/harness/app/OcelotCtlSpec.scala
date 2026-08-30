@@ -125,6 +125,55 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
     }
   }
 
+  test("project init writes bounded schema-v2 templates that validate without repair") {
+    val parent = Files.createTempDirectory("ocelot-harness-project-init-")
+    try {
+      Vector("single-computer", "two-computers", "rack-server", "mixed-network").foreach {
+        template =>
+          val destination = parent.resolve(template)
+          val (initExit, initOut) = capture(
+            OcelotCtl.run(
+              Array("project", "init", destination.toString, "--template", template, "--json")
+            )
+          )
+          withClue(s"template $template output: $initOut") {
+            initExit shouldBe AppExitCode.Success
+            Files.isRegularFile(destination.resolve("ocelot-harness.conf")) shouldBe true
+            val (validateExit, validateOut) = capture(
+              OcelotCtl.run(
+                Array("--project", destination.toString, "project", "validate", "--json")
+              )
+            )
+            validateExit shouldBe AppExitCode.Success
+            ujson.read(validateOut)("schemaVersion").num shouldBe 2
+          }
+      }
+    } finally {
+      val paths = Files.walk(parent)
+      try paths.iterator().asScala.toVector.reverse.foreach(Files.deleteIfExists)
+      finally paths.close()
+    }
+  }
+
+  test("project init refuses an occupied destination and unknown templates") {
+    val parent = Files.createTempDirectory("ocelot-harness-project-init-invalid-")
+    try {
+      val occupied = Files.createDirectory(parent.resolve("occupied"))
+      Files.write(occupied.resolve("keep.txt"), Array[Byte](1))
+      OcelotCtl.run(
+        Array("project", "init", occupied.toString, "--template", "single-computer")
+      ) shouldBe AppExitCode.Domain
+      OcelotCtl.run(
+        Array("project", "init", parent.resolve("unknown").toString, "--template", "nope")
+      ) shouldBe AppExitCode.Usage
+      Files.readAllBytes(occupied.resolve("keep.txt")) shouldBe Array[Byte](1)
+    } finally {
+      val paths = Files.walk(parent)
+      try paths.iterator().asScala.toVector.reverse.foreach(Files.deleteIfExists)
+      finally paths.close()
+    }
+  }
+
   test("CLI durations reject numeric overflow") {
     OcelotCtl.run(
       Array(

@@ -11,6 +11,7 @@ import ocelot.harness.core.project.{
   DesktopWorkspaceProjects,
   ProjectErrors,
   ProjectLoader,
+  ProjectTemplates,
   WorkspaceSourceDefinition
 }
 
@@ -63,14 +64,34 @@ object OcelotCtl {
             )
             json -> s"imported ${imported.projectRoot}"
           }
+      case Vector("project", "init", destination, "--template", template) =>
+        ProjectTemplates.initialize(Paths.get(destination), template) match {
+          case Left(error) if error.code == "unknown_template" =>
+            return fail(AppExitCode.Usage, error.message, Some(error.code))
+          case Left(error) =>
+            return fail(AppExitCode.Domain, error.message, Some(error.code))
+          case Right(projectRoot) =>
+            val json = ujson.Obj("projectRoot" -> projectRoot.toString, "template" -> template)
+            Right(json -> s"initialized $projectRoot")
+        }
       case Vector("project", "validate") =>
         validateProject(global.projectRoot).map { case (project, inspection) =>
           val kind = project.workspaceSource match {
             case WorkspaceSourceDefinition.Manifest   => "manifest"
             case _: WorkspaceSourceDefinition.Desktop => "desktop"
           }
-          val computerCount = inspection.fold(project.computers.size)(_.computers.size)
-          val screenCount = inspection.fold(project.screens.size)(_.screens.size)
+          val computerCount = inspection.fold(
+            project.manifestTopology.fold(project.computers.size)(
+              _.devices.count(device =>
+                Set("computer", "server", "microcontroller").contains(device.kind.name)
+              )
+            )
+          )(_.computers.size)
+          val screenCount = inspection.fold(
+            project.manifestTopology.fold(project.screens.size)(
+              _.devices.count(_.kind.name == "screen")
+            )
+          )(_.screens.size)
           val json = ujson.Obj(
             "schemaVersion" -> project.schemaVersion,
             "projectId" -> project.id.value,
@@ -440,6 +461,7 @@ object OcelotCtl {
       |Commands:
       |
       |```text
+      |ocelotctl project init <project-directory> --template <single-computer|two-computers|rack-server|mixed-network> [--json]
       |ocelotctl project inspect-desktop <desktop-directory> [--json]
       |ocelotctl project import-desktop <desktop-directory> <project-directory> [--json]
       |ocelotctl --project <project-directory> project validate [--json]
@@ -473,7 +495,7 @@ object OcelotCtl {
       |ocelot-harnessd serve <--stdio|--loopback> --project <path>
       |```
       |
-      |Project inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
       |""".stripMargin
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])

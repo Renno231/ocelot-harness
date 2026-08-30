@@ -43,13 +43,21 @@ esac
 printf '%s\n' 'PASS: packaged viewer entrypoint'
 
 cli_help=$("$script_directory/ocelotctl" --help)
+printf '%s\n' "$cli_help" | grep -Fq 'project init'
 printf '%s\n' "$cli_help" | grep -Fq 'project inspect-desktop'
 printf '%s\n' "$cli_help" | grep -Fq 'project import-desktop'
 printf '%s\n' "$cli_help" | grep -Fq 'project validate'
-printf '%s\n' 'PASS: packaged Desktop project commands'
+printf '%s\n' 'PASS: packaged local project commands'
 
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
+generated_project="$smoke_directory/generated project with spaces"
+init_result=$("$script_directory/ocelotctl" project init "$generated_project" --template single-computer --json)
+printf '%s\n' "$init_result" | grep -Fq '"template":"single-computer"'
+validation_result=$("$script_directory/ocelotctl" --project "$generated_project" project validate --json)
+printf '%s\n' "$validation_result" | grep -Fq '"schemaVersion":2'
+printf '%s\n' "$validation_result" | grep -Fq '"workspaceKind":"manifest"'
+printf '%s\n' 'PASS: packaged schema-v2 project initialization and validation'
 protocol_input="$smoke_directory/input.ndjson"
 protocol_output="$smoke_directory/stdout.ndjson"
 service_log="$smoke_directory/stderr.log"

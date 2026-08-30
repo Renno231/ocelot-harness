@@ -34,6 +34,12 @@ object DiskId {
     LogicalId.validate(value).map(new DiskId(_))
 }
 
+final class DeviceId private (value: String) extends LogicalId(value)
+object DeviceId {
+  def parse(value: String): Either[String, DeviceId] =
+    LogicalId.validate(value).map(new DeviceId(_))
+}
+
 private[project] object LogicalId {
   private val Pattern = "[a-z][a-z0-9-]{0,62}".r
 
@@ -51,7 +57,9 @@ final case class ServicePolicy(
     maxComputers: Int = 16,
     maxScreens: Int = 16,
     maxConnections: Int = 64,
-    maxManagedDisks: Int = 32
+    maxManagedDisks: Int = 32,
+    maxDevices: Int = 128,
+    maxInventoryItems: Int = 512
 )
 
 final case class ProjectPaths(
@@ -128,9 +136,14 @@ final case class DiskDefinition(
     access: DiskAccess
 )
 
-sealed trait CardKind extends Product with Serializable
+sealed trait CardKind extends Product with Serializable { def name: String }
 object CardKind {
-  case object Network extends CardKind
+  case object Network extends CardKind { val name = "network" }
+  case object Wireless extends CardKind { val name = "wireless" }
+  case object Linked extends CardKind { val name = "linked" }
+  case object Data extends CardKind { val name = "data" }
+  case object Redstone extends CardKind { val name = "redstone" }
+  case object Internet extends CardKind { val name = "internet" }
 }
 
 final case class CardDefinition(kind: CardKind, tier: Int)
@@ -175,6 +188,113 @@ final case class ConnectionDefinition(
     to: ConnectionEndpoint
 )
 
+sealed trait ManifestDeviceKind extends Product with Serializable {
+  def name: String
+}
+object ManifestDeviceKind {
+  case object Computer extends ManifestDeviceKind { val name = "computer" }
+  case object Screen extends ManifestDeviceKind { val name = "screen" }
+  case object Rack extends ManifestDeviceKind { val name = "rack" }
+  case object Server extends ManifestDeviceKind { val name = "server" }
+  case object DiskDrive extends ManifestDeviceKind { val name = "disk-drive" }
+  case object Raid extends ManifestDeviceKind { val name = "raid" }
+  case object Hologram extends ManifestDeviceKind { val name = "hologram" }
+  case object NoteBlock extends ManifestDeviceKind { val name = "note-block" }
+  case object IronNoteBlock extends ManifestDeviceKind { val name = "iron-note-block" }
+  case object Microcontroller extends ManifestDeviceKind { val name = "microcontroller" }
+  case object Relay extends ManifestDeviceKind { val name = "relay" }
+  case object Cable extends ManifestDeviceKind { val name = "cable" }
+
+  val values: Vector[ManifestDeviceKind] = Vector(
+    Computer,
+    Screen,
+    Rack,
+    Server,
+    DiskDrive,
+    Raid,
+    Hologram,
+    NoteBlock,
+    IronNoteBlock,
+    Microcontroller,
+    Relay,
+    Cable
+  )
+  def fromName(value: String): Option[ManifestDeviceKind] = values.find(_.name == value)
+}
+
+sealed trait InventoryKind extends Product with Serializable { def name: String }
+object InventoryKind {
+  case object Cpu extends InventoryKind { val name = "cpu" }
+  case object Apu extends InventoryKind { val name = "apu" }
+  case object Memory extends InventoryKind { val name = "memory" }
+  case object Gpu extends InventoryKind { val name = "gpu" }
+  case object Eeprom extends InventoryKind { val name = "eeprom" }
+  case object ComponentBus extends InventoryKind { val name = "component-bus" }
+  case object ManagedHdd extends InventoryKind { val name = "managed-hdd" }
+  case object UnmanagedHdd extends InventoryKind { val name = "unmanaged-hdd" }
+  case object ManagedFloppy extends InventoryKind { val name = "managed-floppy" }
+  case object UnmanagedFloppy extends InventoryKind { val name = "unmanaged-floppy" }
+  case object Network extends InventoryKind { val name = "network" }
+  case object Wireless extends InventoryKind { val name = "wireless" }
+  case object Linked extends InventoryKind { val name = "linked" }
+  case object Data extends InventoryKind { val name = "data" }
+  case object Redstone extends InventoryKind { val name = "redstone" }
+  case object Internet extends InventoryKind { val name = "internet" }
+
+  val values: Vector[InventoryKind] = Vector(
+    Cpu,
+    Apu,
+    Memory,
+    Gpu,
+    Eeprom,
+    ComponentBus,
+    ManagedHdd,
+    UnmanagedHdd,
+    ManagedFloppy,
+    UnmanagedFloppy,
+    Network,
+    Wireless,
+    Linked,
+    Data,
+    Redstone,
+    Internet
+  )
+  def fromName(value: String): Option[InventoryKind] = values.find(_.name == value)
+}
+
+final case class InventoryItemDefinition(
+    slot: String,
+    kind: InventoryKind,
+    tier: Option[BigDecimal],
+    id: Option[DiskId],
+    label: Option[String],
+    source: Option[Path],
+    access: Option[DiskAccess],
+    builtin: Option[String],
+    tunnel: Option[String]
+)
+
+final case class ManifestDeviceDefinition(
+    id: DeviceId,
+    kind: ManifestDeviceKind,
+    tier: Option[Int],
+    keyboard: Boolean,
+    aspectRatio: (Int, Int),
+    inventory: Vector[InventoryItemDefinition],
+    label: Option[String],
+    source: Option[Path],
+    access: Option[DiskAccess]
+)
+
+final case class DevicePortReference(device: DeviceId, port: String) {
+  def value: String = s"${device.value}:$port"
+}
+final case class DeviceConnectionDefinition(from: DevicePortReference, to: DevicePortReference)
+final case class ManifestTopologyDefinition(
+    devices: Vector[ManifestDeviceDefinition],
+    connections: Vector[DeviceConnectionDefinition]
+)
+
 final case class ValidatedProject(
     schemaVersion: Int,
     id: ProjectId,
@@ -183,7 +303,8 @@ final case class ValidatedProject(
     workspaceSource: WorkspaceSourceDefinition,
     computers: Vector[ComputerDefinition],
     screens: Vector[ScreenDefinition],
-    connections: Vector[ConnectionDefinition]
+    connections: Vector[ConnectionDefinition],
+    manifestTopology: Option[ManifestTopologyDefinition] = None
 )
 
 final case class ProjectError(path: String, code: String, message: String)

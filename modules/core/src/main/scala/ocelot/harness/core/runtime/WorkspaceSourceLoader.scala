@@ -65,7 +65,10 @@ private[runtime] object WorkspaceSourceLoader {
     override def restore(
         workspace: Workspace,
         identity: SnapshotIdentity
-    ): ConstructedWorkspace = HardwareCatalog.restore(project, workspace, identity)
+    ): ConstructedWorkspace = project.manifestTopology match {
+      case Some(topology) => ManifestHardwareCatalog.restore(project, topology, workspace, identity)
+      case None           => HardwareCatalog.restore(project, workspace, identity)
+    }
   }
 
   private final class DesktopWorkspaceSource(

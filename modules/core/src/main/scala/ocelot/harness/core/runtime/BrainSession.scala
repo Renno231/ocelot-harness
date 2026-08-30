@@ -8,7 +8,8 @@ import scala.collection.mutable.ArrayDeque
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import totoro.ocelot.brain.entity.{Case => BrainCase, Screen}
+import totoro.ocelot.brain.entity.Screen
+import totoro.ocelot.brain.entity.traits.{Computer, Entity, Inventory}
 import totoro.ocelot.brain.workspace.Workspace
 
 import ocelot.harness.core.HarnessError
@@ -201,7 +202,7 @@ private[runtime] final class BrainSession(
         try {
           lane.execute {
             eventBuffer.foreach(_.close())
-            workspace.getEntitiesIter.toVector.reverse.foreach(workspace.remove)
+            disposeWorkspace(workspace)
           } match {
             case Left(error) => failure = Some(new IllegalStateException(error.message))
             case Right(_)    =>
@@ -215,13 +216,37 @@ private[runtime] final class BrainSession(
     failure.foreach(throw _)
   }
 
-  private def disposeWorkspace(value: Workspace): Unit =
-    value.getEntitiesIter.toVector.reverse.foreach { entity =>
+  private def disposeWorkspace(value: Workspace): Unit = {
+    val topLevel = value.getEntitiesIter.toVector
+    val allComputers = topLevel.flatMap(nestedComputers).distinct
+    allComputers.foreach(computer =>
+      try computer.machine.stop()
+      catch { case NonFatal(_) => }
+    )
+    topLevel.reverse.foreach { entity =>
       try value.remove(entity)
       catch {
         case NonFatal(_) =>
       }
     }
+    allComputers
+      .filterNot(computer => topLevel.exists(_ eq computer))
+      .foreach(computer =>
+        try computer.dispose()
+        catch { case NonFatal(_) => }
+      )
+  }
+
+  private def nestedComputers(entity: Entity): Vector[Computer] = {
+    val nested = entity match {
+      case inventory: Inventory => inventory.inventory.entities.toVector.flatMap(nestedComputers)
+      case _                    => Vector.empty
+    }
+    entity match {
+      case computer: Computer => computer +: nested
+      case _                  => nested
+    }
+  }
 
   private def errorMessage(error: Throwable): String =
     Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
@@ -232,7 +257,7 @@ private[runtime] final class BrainSession(
       else lane.execute(operation).flatMap(identity)
     }
 
-  private def machine(id: ComputerId): Either[HarnessError, BrainCase] =
+  private def machine(id: ComputerId): Either[HarnessError, Computer] =
     if (id == null) Left(UnknownComputer("<null>"))
     else
       constructed.flatMap(_.computers.get(id)) match {
@@ -248,7 +273,7 @@ private[runtime] final class BrainSession(
         case None        => Left(UnknownScreen(id.value))
       }
 
-  private def machineStatus(id: ComputerId, computer: BrainCase): MachineStatus = {
+  private def machineStatus(id: ComputerId, computer: Computer): MachineStatus = {
     val lastError = Option(computer.machine.lastError)
     val state =
       if (computer.machine.isPaused) MachineState.Paused
@@ -258,7 +283,7 @@ private[runtime] final class BrainSession(
     MachineStatus(id, state, lastError)
   }
 
-  private def settleStoppedMachine(computer: BrainCase): Either[HarnessError, Unit] = {
+  private def settleStoppedMachine(computer: Computer): Either[HarnessError, Unit] = {
     val deadline = System.nanoTime() + 2.seconds.toNanos
     while (computer.machine.isExecuting && System.nanoTime() < deadline) {
       LockSupport.parkNanos(100000L)

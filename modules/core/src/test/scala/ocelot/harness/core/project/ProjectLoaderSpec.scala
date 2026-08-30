@@ -97,6 +97,89 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
     }
   }
 
+  test("schema-v2 generated templates cover the deterministic device catalog") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("mixed")
+      ProjectTemplates.initialize(root, "mixed-network").value
+
+      val project = ProjectLoader.load(root).value
+      val topology = project.manifestTopology.get
+      topology.devices.map(_.kind).toSet shouldBe ManifestDeviceKind.values.toSet
+      topology.devices.count(device =>
+        Set(
+          ManifestDeviceKind.Computer,
+          ManifestDeviceKind.Server,
+          ManifestDeviceKind.Microcontroller
+        ).contains(device.kind)
+      ) shouldBe 3
+      topology.connections.exists(connection =>
+        connection.from.value == "rack:mount-1" && connection.to.value == "server:mount"
+      ) shouldBe true
+      topology.devices.flatMap(_.inventory).map(_.kind).toSet should contain allElementsOf Set(
+        InventoryKind.Cpu,
+        InventoryKind.Memory,
+        InventoryKind.Gpu,
+        InventoryKind.Eeprom,
+        InventoryKind.ComponentBus,
+        InventoryKind.ManagedHdd,
+        InventoryKind.UnmanagedHdd,
+        InventoryKind.ManagedFloppy,
+        InventoryKind.Network,
+        InventoryKind.Wireless
+      )
+    }
+  }
+
+  test("schema-v2 validates semantic slots, typed ports, and server mount multiplicity") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("invalid")
+      ProjectTemplates.initialize(root, "rack-server").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val invalid = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+        .replace("slot = \"memory-1\"", "slot = \"memory-9\"")
+        .replace("rack:mount-1", "rack:unknown")
+      Files.write(manifest, invalid.getBytes(StandardCharsets.UTF_8))
+
+      val errors = ProjectLoader.load(root).left.value.errors
+      errors.map(_.path) shouldBe errors.map(_.path).sorted
+      errors.map(_.code) should contain("invalid_connection")
+      errors.map(_.code) should contain("profile_violation")
+      errors.map(_.message).exists(_.contains("exactly one rack mount")) shouldBe true
+    }
+  }
+
+  test("schema-v2 Internet cards require manifest and service double opt-in") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("internet")
+      ProjectTemplates.initialize(root, "rack-server").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val requested = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+        .replace("internet { http = false, tcp = false }", "internet { http = true, tcp = true }")
+        .replace(
+          "{ slot = \"card-2\", kind = \"network\", tier = 1 }",
+          "{ slot = \"card-2\", kind = \"internet\" }"
+        )
+      Files.write(manifest, requested.getBytes(StandardCharsets.UTF_8))
+
+      ProjectLoader.load(root).left.value.errors.map(_.message) should contain(
+        "Internet cards require manifest request and service policy opt-in"
+      )
+      ProjectLoader
+        .load(
+          root,
+          ServicePolicy(allowInternetHttp = true, allowInternetTcp = true)
+        )
+        .value
+        .manifestTopology
+        .get
+        .devices
+        .flatMap(_.inventory)
+        .map(_.kind) should contain(
+        InventoryKind.Internet
+      )
+    }
+  }
+
   test("schema-v2 Desktop sources cannot escape the project or mix manifest topology") {
     withTempDirectory { parent =>
       val root = Files.createDirectory(parent.resolve("project"))
@@ -108,12 +191,88 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
            |workspace { kind = "desktop", directory = "${outside.toString.replace('\\', '/')}" }
            |runtime { }
            |computers { main = {} }
+           |devices { hidden = { kind = "cable" } }
            |""".stripMargin
       )
 
       val errors = ProjectLoader.load(root).left.value.errors
-      errors.map(_.path) should contain allElementsOf Vector("workspace.directory", "computers")
+      errors.map(_.path) should contain allElementsOf Vector(
+        "workspace.directory",
+        "computers",
+        "devices"
+      )
       errors.map(_.code) should contain allElementsOf Vector("path_not_allowed", "source_conflict")
+    }
+  }
+
+  test("schema-v2 rejects invalid device options and topology before construction") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("invalid-v2")
+      ProjectTemplates.initialize(root, "mixed-network").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val invalid = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+        .replace(
+          "hologram { kind = \"hologram\", tier = 2 }",
+          "hologram { kind = \"hologram\", tier = 3 }"
+        )
+        .replace("rack { kind = \"rack\" }", "rack { kind = \"rack\", aspectRatio = [1, 1] }")
+        .replace("label = \"media\"", "label = \"\"")
+        .replace(
+          "server:network\", to = \"server-screen:network",
+          "server:secondary-2\", to = \"server-screen:network"
+        )
+
+      Files.write(manifest, invalid.getBytes(StandardCharsets.UTF_8))
+      val errors = ProjectLoader.load(root).left.value.errors
+
+      errors.map(_.path) shouldBe errors.map(_.path).sorted
+      errors.map(_.path) should contain allElementsOf Vector(
+        "devices.hologram.tier",
+        "devices.rack.aspectRatio",
+        "devices.disk-drive.inventory[0].label",
+        "connections[2].from"
+      )
+    }
+  }
+
+  test("schema-v2 accepts the pinned Desktop tier-one server profile") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("tier-one-server")
+      ProjectTemplates.initialize(root, "rack-server").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val tierOne = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+        .replace("kind = \"server\", tier = 3", "kind = \"server\", tier = 1")
+        .replace("kind = \"gpu\", tier = 3", "kind = \"gpu\", tier = 2")
+        .replace("kind = \"cpu\", tier = 3", "kind = \"cpu\", tier = 2")
+        .replace("kind = \"component-bus\", tier = 3", "kind = \"component-bus\", tier = 2")
+        .replace("kind = \"memory\", tier = 3.5", "kind = \"memory\", tier = 2.5")
+        .replace("kind = \"managed-hdd\", tier = 3", "kind = \"managed-hdd\", tier = 2")
+
+      Files.write(manifest, tierOne.getBytes(StandardCharsets.UTF_8))
+      ProjectLoader
+        .load(root)
+        .value
+        .manifestTopology
+        .get
+        .devices
+        .find(_.kind == ManifestDeviceKind.Server)
+        .flatMap(_.tier) shouldBe Some(1)
+    }
+  }
+
+  test("schema-v2 treats graph edges as undirected for duplicate detection") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("duplicate-edge")
+      ProjectTemplates.initialize(root, "single-computer").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val duplicate = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+        .replace(
+          "  { from = \"main:network\", to = \"main-screen:network\" }",
+          "  { from = \"main:network\", to = \"main-screen:network\" },\n  { from = \"main-screen:network\", to = \"main:network\" }"
+        )
+      Files.write(manifest, duplicate.getBytes(StandardCharsets.UTF_8))
+
+      ProjectLoader.load(root).left.value.errors.map(_.code) should contain("duplicate_id")
     }
   }
 

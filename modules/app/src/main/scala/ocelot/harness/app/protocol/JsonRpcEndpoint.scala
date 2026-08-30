@@ -544,6 +544,20 @@ private object JsonCodec {
       "connections" -> ujson.Arr.from(
         value.connections.map(connection =>
           ujson.Obj("from" -> connection.from.value, "to" -> connection.to.value)
+        ) ++ value.deviceConnections.map { case (from, to) =>
+          ujson.Obj("from" -> from, "to" -> to)
+        }
+      ),
+      "devices" -> ujson.Arr.from(
+        value.devices.map(device =>
+          ujson.Obj(
+            "deviceId" -> device.id,
+            "kind" -> device.kind,
+            "tier" -> device.tier.map[ujson.Value](ujson.Num(_)).getOrElse(ujson.Null),
+            "runtimeAddress" -> device.runtimeAddress
+              .map[ujson.Value](ujson.Str)
+              .getOrElse(ujson.Null)
+          )
         )
       )
     )
@@ -630,6 +644,7 @@ private object JsonCodec {
   private def computer(value: ComputerDescription): ujson.Value =
     ujson.Obj(
       "computerId" -> value.id.value,
+      "kind" -> value.kind,
       "caseTier" -> value.caseTier,
       "runtimeAddress" -> value.runtimeAddress,
       "components" -> ujson.Arr.from(
@@ -661,7 +676,7 @@ private object JsonCodec {
       "cards" -> ujson.Arr.from(
         value.cards.map(card =>
           ujson.Obj(
-            "kind" -> (card.kind match { case CardKind.Network => "network" }),
+            "kind" -> card.kind.name,
             "tier" -> card.tier,
             "runtimeAddress" -> card.runtimeAddress
           )

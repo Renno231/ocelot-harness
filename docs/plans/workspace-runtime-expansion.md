@@ -205,6 +205,10 @@ copy an existing compatible Desktop workspace
 
 ## Stage 2 — Manifest v2 and project authoring
 
+**Status:** Complete
+
+Delivered strict schema-v2 semantic devices, inventories, typed ports, and service-owned resource caps while preserving schema-v1 behavior. The manifest catalog constructs cases, screens/keyboards, racks/servers, disk drives/floppies, RAID, holograms, note blocks, microcontrollers, relays, and cables; binds cases, servers, and microcontrollers through the same machine API; and restores declared topology, private device identity, media bindings, and runnable server connections from Harness snapshots. Local project initialization provides four bounded runnable templates that validate without manual repair.
+
 ### Supported deterministic topology
 
 Manifest v2 covers the pinned Ocelot Desktop original-node set that can be constructed from ocelot-brain without Desktop classes:

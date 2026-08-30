@@ -55,7 +55,7 @@ Tests that create a resource close it even on failure.
 ```text
 harness-core
 ├─ owns emulation behavior and invariants
-├─ validates manifest and imported Desktop workspace sources
+├─ validates schema-v1 profiles, schema-v2 semantic device graphs, and imported Desktop sources
 ├─ exposes immutable first-party models
 └─ contains no JSON-RPC or CLI presentation
 
@@ -65,7 +65,7 @@ harness-app
 └─ delegates emulation policy to harness-core
 ```
 
-Do not introduce a generic emulator backend interface while ocelot-brain is the only backend. Organize private implementation by responsibility without creating pass-through public wrappers. Graphical viewer tests exercise pure decoding, geometry, protocol, and lifecycle behavior without requiring a display from canonical CI.
+Do not introduce a generic emulator backend interface while ocelot-brain is the only backend. Organize private implementation by responsibility without creating pass-through public wrappers. Graphical viewer tests exercise pure decoding, geometry, protocol, and lifecycle behavior without requiring a display from canonical CI. Schema-v2 catalog changes update the generated project templates and [`docs/reference/manifest-v2.md`](docs/reference/manifest-v2.md) in the same change.
 
 ## Error handling
 

@@ -27,7 +27,8 @@ import ocelot.harness.core.workspace._
 private[runtime] final case class SnapshotIdentity(
     computers: Map[String, String],
     screens: Map[String, String],
-    keyboards: Map[String, String]
+    keyboards: Map[String, String],
+    devices: Map[String, String] = Map.empty
 )
 
 private[runtime] final case class LoadedSnapshot(
@@ -212,6 +213,9 @@ private[runtime] object SnapshotStore {
         .getOrElse("")
       s"  ${ConfigUtil.quoteString(value.id.value)} = { address=${ConfigUtil.quoteString(value.runtimeAddress)}$keyboard }"
     }
+    val devices = constructed.deviceEntities.toVector.sortBy(_._1).map { case (id, entity) =>
+      s"  ${ConfigUtil.quoteString(id)}=${ConfigUtil.quoteString(entity.entityId.toString)}"
+    }
     Vector(
       s"formatVersion=$FormatVersion",
       s"harnessVersion=${ConfigUtil.quoteString(BuildIdentity.HarnessVersion)}",
@@ -231,6 +235,9 @@ private[runtime] object SnapshotStore {
       "}",
       "screens {",
       screens.mkString("\n"),
+      "}",
+      "devices {",
+      devices.mkString("\n"),
       "}",
       ""
     ).mkString("\n")
@@ -289,6 +296,17 @@ private[runtime] object SnapshotStore {
               if (config.hasPath(path)) Some(id -> config.getString(path)) else None
             }
             .toMap
+          val devices =
+            if (config.hasPath("devices"))
+              config
+                .getObject("devices")
+                .keySet()
+                .asScala
+                .map { id =>
+                  id -> config.getString(s"devices.${ConfigUtil.quoteString(id)}")
+                }
+                .toMap
+            else Map.empty[String, String]
           val size = config.getLong("workspaceSize")
           val copiedDiskBytes = config.getLong("copiedDiskBytes")
           val digest = config.getString("workspaceSha256")
@@ -299,7 +317,7 @@ private[runtime] object SnapshotStore {
             Left(SnapshotCorrupt("snapshot metadata contains invalid size, checksum, or tick"))
           } else {
             Right(
-              SnapshotIdentity(computers, screens, keyboards) -> SnapshotDescription(
+              SnapshotIdentity(computers, screens, keyboards, devices) -> SnapshotDescription(
                 name,
                 s"${name.value}/$WorkspaceFile",
                 size,

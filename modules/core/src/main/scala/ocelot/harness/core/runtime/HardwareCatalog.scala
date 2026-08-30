@@ -15,7 +15,7 @@ import totoro.ocelot.brain.entity.{
   Screen,
   WirelessNetworkCard
 }
-import totoro.ocelot.brain.entity.traits.{Entity, Environment}
+import totoro.ocelot.brain.entity.traits.{Computer, Entity, Environment}
 import totoro.ocelot.brain.loot.Loot
 import totoro.ocelot.brain.util.{ExtendedTier, Tier}
 import totoro.ocelot.brain.workspace.Workspace
@@ -25,11 +25,12 @@ import ocelot.harness.core.workspace._
 
 private[runtime] final case class ConstructedWorkspace(
     description: WorkspaceDescription,
-    computers: Map[ComputerId, BrainCase],
+    computers: Map[ComputerId, Computer],
     screens: Map[ScreenId, Screen],
     keyboards: Map[ScreenId, Keyboard],
     screenTiers: Map[ScreenId, Int],
-    managedDisks: Vector[(String, java.nio.file.Path)]
+    managedDisks: Vector[(String, java.nio.file.Path)],
+    deviceEntities: Map[String, Entity] = Map.empty
 )
 
 private[runtime] object HardwareCatalog {
@@ -42,7 +43,16 @@ private[runtime] object HardwareCatalog {
     val Eeprom = 9
   }
 
-  def construct(project: ValidatedProject, workspace: Workspace): ConstructedWorkspace = {
+  def construct(project: ValidatedProject, workspace: Workspace): ConstructedWorkspace =
+    project.manifestTopology match {
+      case Some(topology) => ManifestHardwareCatalog.construct(project, topology, workspace)
+      case None           => constructLegacy(project, workspace)
+    }
+
+  private def constructLegacy(
+      project: ValidatedProject,
+      workspace: Workspace
+  ): ConstructedWorkspace = {
     val added = ArrayBuffer.empty[Entity]
 
     def add[T <: Entity](entity: T): T = {

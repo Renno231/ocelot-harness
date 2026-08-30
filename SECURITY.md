@@ -22,6 +22,14 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 - Artifacts, runtime metadata, and snapshots remain under their configured canonical roots.
 - Artifact and snapshot publication uses temporary files followed by atomic replacement where supported.
 
+### Deterministic manifest construction
+
+- Schema-v2 project initialization refuses occupied destinations and writes only beneath the requested project root.
+- Unknown device, inventory, option, and port keys are rejected before construction.
+- Semantic slot, tier, rack-mount, cardinal-side, multiplicity, and topology limits are validated before any brain entity is created.
+- Managed media uses the same canonical service-approved root policy as schema v1.
+- Internet hardware is rejected unless both manifest and service policy opt in.
+
 ### Desktop workspace import
 
 - Import requires the compatible pinned brain serialization format and preflights every serialized entity class before loading.
@@ -55,7 +63,7 @@ Every run condition has both a maximum simulated tick count and wall-clock deadl
 
 - service and viewer command queues
 - event retention
-- device count
+- device, inventory-item, connection, computer, screen, and managed-media counts
 - capture frequency
 - artifact size
 - diagnostic size
