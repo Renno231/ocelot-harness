@@ -8,7 +8,7 @@
 
 Ocelot Harness provides an external, headless control plane for OpenComputers environments running in ocelot-brain. It lets an agent or test client configure emulated hardware, run computers, inject user input, inspect screens, capture artifacts, and control simulation progress without Minecraft or Ocelot Desktop.
 
-Phase 1 owns the complete loop:
+Phase 1 owns the complete loop. The approved post-Phase-1 expansion also accepts compatible saved Ocelot Desktop workspaces as bounded project sources while retaining the same runtime/session boundary:
 
 ```text
 project manifest + host files
@@ -68,8 +68,10 @@ The implementation boundary ends at ocelot-brain. The optional app-owned Swing v
                                           │ typed calls
 ┌─────────────────────────────────────────▼───────────────┐
 │ harness-core                                             │
-│  RuntimeOwner → ProjectLoader → BrainSession            │
-│                                  ├─ hardware catalog     │
+│  RuntimeOwner → ProjectLoader → workspace source        │
+│                                  ├─ manifest catalog     │
+│                                  └─ Desktop import       │
+│                              → BrainSession              │
 │                                  ├─ simulation control   │
 │                                  ├─ input                │
 │                                  ├─ observations         │
@@ -121,7 +123,11 @@ Only two first-party SBT modules are created initially:
 | `harness-core` | Typed headless automation API; hides all brain lifecycle and concurrency rules | ocelot-brain |
 | `harness-app` | External protocol, transports, CLI, optional viewer, and process entrypoints | `harness-core` |
 
-Packages organize private implementation responsibilities without creating additional public module interfaces. There is one concrete ocelot-brain implementation in Phase 1. A generic emulator-backend interface is not introduced until a second real backend exists.
+Packages organize private implementation responsibilities without creating additional public module interfaces. There is one concrete ocelot-brain implementation in Phase 1. `WorkspaceSourceLoader` is a private source-format boundary: the manifest adapter constructs a brain workspace, while the Desktop adapter loads a compatible saved brain graph. It is not an emulator-backend interface. A generic emulator-backend interface is not introduced until a second real backend exists.
+
+### Compatible Desktop workspace source
+
+Schema v2 can select a copied Ocelot Desktop source directory. Local CLI inspection/import validates bounded compressed NBT, serialized classes, graph size, copied files, managed-disk containment, source checksums, and private UUID-to-logical-ID metadata before the daemon loads anything. The adapter loads the complete `back` graph directly, retains the copied `front` data without interpreting Desktop presentation, and binds every brain `Case`, `Screen`, and associated `Keyboard` to stable public IDs. Other compatible entities and edges remain alive in the same workspace even when they do not have specialized commands. Snapshot candidates use the same source-owned identity rules and replace active state only after complete validation.
 
 ## Deep module boundaries
 

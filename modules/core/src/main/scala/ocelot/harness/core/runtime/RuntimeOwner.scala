@@ -41,15 +41,14 @@ final class RuntimeOwner private[runtime] (
       ProjectLoader.load(root, policy) match {
         case Left(errors) => Left(ProjectValidationFailed(errors.errors))
         case Right(project) =>
-          try {
-            val workspace = new Workspace(project.paths.projectRoot)
+          WorkspaceSourceLoader.load(project, policy).flatMap { loaded =>
             try {
-              val constructed = HardwareCatalog.construct(project, workspace)
               val session = new BrainSession(
                 project.paths.projectRoot,
-                workspace,
+                loaded.workspace,
                 Some(project),
-                Some(constructed),
+                Some(loaded.constructed),
+                Some(loaded.source),
                 lifecycle.version,
                 sessionClosed
               )
@@ -57,17 +56,19 @@ final class RuntimeOwner private[runtime] (
               Right(session)
             } catch {
               case NonFatal(error) =>
-                workspace.getEntitiesIter.toVector.reverse.foreach { entity =>
-                  try workspace.remove(entity)
-                  catch {
-                    case NonFatal(_) =>
-                  }
+                loaded.workspace.getEntitiesIter.toVector.reverse.foreach { entity =>
+                  try loaded.workspace.remove(entity)
+                  catch { case NonFatal(_) => }
                 }
-                throw error
+                Left(
+                  ProjectOpenFailed(
+                    project.paths.projectRoot.toString,
+                    Option(error.getMessage)
+                      .filter(_.nonEmpty)
+                      .getOrElse(error.getClass.getSimpleName)
+                  )
+                )
             }
-          } catch {
-            case NonFatal(error) =>
-              Left(ProjectOpenFailed(project.paths.projectRoot.toString, errorMessage(error)))
           }
       }
     }
@@ -85,6 +86,7 @@ final class RuntimeOwner private[runtime] (
         val session = new BrainSession(
           projectRoot,
           new Workspace(projectRoot),
+          None,
           None,
           None,
           lifecycle.version,
@@ -181,8 +183,6 @@ final class RuntimeOwner private[runtime] (
     }
   }
 
-  private def errorMessage(error: Throwable): String =
-    Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
 }
 
 object RuntimeOwner {

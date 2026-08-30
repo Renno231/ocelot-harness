@@ -54,6 +54,15 @@ try {
     }
     Write-Host 'PASS: packaged viewer entrypoint'
 
+    $cliHelp = (& "$scriptDirectory\ocelotctl.cmd" --help | Out-String)
+    if ($LASTEXITCODE -ne 0 -or
+        $cliHelp -notmatch 'project inspect-desktop' -or
+        $cliHelp -notmatch 'project import-desktop' -or
+        $cliHelp -notmatch 'project validate') {
+        throw 'Packaged local project commands are unavailable'
+    }
+    Write-Host 'PASS: packaged Desktop project commands'
+
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null
     try {

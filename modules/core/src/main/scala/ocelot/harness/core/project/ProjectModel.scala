@@ -80,6 +80,12 @@ final case class ProjectRuntime(
     limits: RuntimeLimits
 )
 
+sealed trait WorkspaceSourceDefinition extends Product with Serializable
+object WorkspaceSourceDefinition {
+  case object Manifest extends WorkspaceSourceDefinition
+  final case class Desktop(directory: Path) extends WorkspaceSourceDefinition
+}
+
 sealed trait MemoryTier extends Product with Serializable {
   def value: BigDecimal
 }
@@ -174,6 +180,7 @@ final case class ValidatedProject(
     id: ProjectId,
     paths: ProjectPaths,
     runtime: ProjectRuntime,
+    workspaceSource: WorkspaceSourceDefinition,
     computers: Vector[ComputerDefinition],
     screens: Vector[ScreenDefinition],
     connections: Vector[ConnectionDefinition]
@@ -194,6 +201,6 @@ final class ProjectErrors private (val errors: Vector[ProjectError]) {
 }
 
 object ProjectErrors {
-  private[project] def from(errors: Vector[ProjectError]): ProjectErrors =
+  private[harness] def from(errors: Vector[ProjectError]): ProjectErrors =
     new ProjectErrors(errors.sortBy(error => (error.path, error.code, error.message)))
 }

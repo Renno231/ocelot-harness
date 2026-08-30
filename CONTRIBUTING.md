@@ -6,7 +6,7 @@ Changes must preserve the contracts in:
 
 1. [`docs/architecture/phase-1.md`](docs/architecture/phase-1.md)
 2. [`docs/decisions/`](docs/decisions/)
-3. the active approved milestone in [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
+3. the active approved plan under [`docs/plans/`](docs/plans/)
 
 Stop and request design review when work requires changing a manifest or protocol contract, widening a public module boundary, weakening security limits, modifying the pinned brain source, or adding a new backend.
 
@@ -55,6 +55,7 @@ Tests that create a resource close it even on failure.
 ```text
 harness-core
 ├─ owns emulation behavior and invariants
+├─ validates manifest and imported Desktop workspace sources
 ├─ exposes immutable first-party models
 └─ contains no JSON-RPC or CLI presentation
 

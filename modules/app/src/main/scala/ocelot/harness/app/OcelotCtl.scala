@@ -6,6 +6,13 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 import ocelot.harness.app.protocol.{AppExitCode, LoopbackClient}
+import ocelot.harness.core.project.{
+  DesktopWorkspaceInspection,
+  DesktopWorkspaceProjects,
+  ProjectErrors,
+  ProjectLoader,
+  WorkspaceSourceDefinition
+}
 
 object OcelotCtl {
   def main(arguments: Array[String]): Unit = {
@@ -18,20 +25,119 @@ object OcelotCtl {
       System.out.print(ReferenceMarkdown)
       AppExitCode.Success
     } else
-      parseGlobal(arguments.toVector).flatMap { global =>
-        parseCommand(global.arguments).map(request => global -> request)
-      } match {
+      parseGlobal(arguments.toVector) match {
         case Left(message) => fail(AppExitCode.Usage, message)
-        case Right((global, request)) =>
-          LoopbackClient.call(global.projectRoot, request.method, request.params) match {
-            case Left(error) => fail(error.exitCode, error.message, error.harnessCode)
-            case Right(result) =>
-              if (global.json)
-                System.out.println(ujson.write(result, indent = -1, escapeUnicode = false))
-              else System.out.println(request.human(result))
-              AppExitCode.Success
+        case Right(global) if global.arguments.headOption.contains("project") =>
+          runProjectCommand(global)
+        case Right(global) =>
+          parseCommand(global.arguments) match {
+            case Left(message) => fail(AppExitCode.Usage, message)
+            case Right(request) =>
+              LoopbackClient.call(global.projectRoot, request.method, request.params) match {
+                case Left(error) => fail(error.exitCode, error.message, error.harnessCode)
+                case Right(result) =>
+                  printResult(global.json, result, request.human)
+                  AppExitCode.Success
+              }
           }
       }
+
+  private def runProjectCommand(global: Global): Int = {
+    val trailingJson = global.arguments.lastOption.contains("--json")
+    val arguments = if (trailingJson) global.arguments.dropRight(1) else global.arguments
+    val result = arguments match {
+      case Vector("project", "inspect-desktop", source) =>
+        DesktopWorkspaceProjects
+          .inspect(Paths.get(source).toAbsolutePath.normalize())
+          .map(value => inspectionJson(value) -> inspectionHuman(value))
+      case Vector("project", "import-desktop", source, destination) =>
+        DesktopWorkspaceProjects
+          .importProject(
+            Paths.get(source).toAbsolutePath.normalize(),
+            Paths.get(destination).toAbsolutePath.normalize()
+          )
+          .map { imported =>
+            val json = ujson.Obj(
+              "projectRoot" -> imported.projectRoot.toString,
+              "inspection" -> inspectionJson(imported.inspection)
+            )
+            json -> s"imported ${imported.projectRoot}"
+          }
+      case Vector("project", "validate") =>
+        validateProject(global.projectRoot).map { case (project, inspection) =>
+          val kind = project.workspaceSource match {
+            case WorkspaceSourceDefinition.Manifest   => "manifest"
+            case _: WorkspaceSourceDefinition.Desktop => "desktop"
+          }
+          val computerCount = inspection.fold(project.computers.size)(_.computers.size)
+          val screenCount = inspection.fold(project.screens.size)(_.screens.size)
+          val json = ujson.Obj(
+            "schemaVersion" -> project.schemaVersion,
+            "projectId" -> project.id.value,
+            "workspaceKind" -> kind,
+            "computers" -> computerCount,
+            "screens" -> screenCount
+          )
+          json -> s"${project.id.value}: valid schema ${project.schemaVersion} $kind project"
+        }
+      case _ => return fail(AppExitCode.Usage, usage)
+    }
+    result match {
+      case Left(errors) =>
+        fail(
+          AppExitCode.Domain,
+          errors.errors.map(error => s"${error.path}: ${error.message}").mkString("; "),
+          Some("project_validation_failed")
+        )
+      case Right((json, human)) =>
+        printResult(global.json || trailingJson, json, _ => human)
+        AppExitCode.Success
+    }
+  }
+
+  private def validateProject(
+      root: Path
+  ): Either[
+    ProjectErrors,
+    (ocelot.harness.core.project.ValidatedProject, Option[DesktopWorkspaceInspection])
+  ] =
+    ProjectLoader.load(root).flatMap { project =>
+      project.workspaceSource match {
+        case WorkspaceSourceDefinition.Manifest => Right(project -> None)
+        case _: WorkspaceSourceDefinition.Desktop =>
+          DesktopWorkspaceProjects
+            .validateImportedProject(project)
+            .map(value => project -> Some(value))
+      }
+    }
+
+  private def inspectionJson(value: DesktopWorkspaceInspection): ujson.Obj =
+    ujson.Obj(
+      "source" -> value.source.toString,
+      "sha256" -> value.sha256,
+      "entityCount" -> value.entityCount,
+      "edgeCount" -> value.edgeCount,
+      "additionalEntityCount" -> value.additionalEntityCount,
+      "computers" -> ujson.Arr.from(value.computers.map(deviceJson)),
+      "screens" -> ujson.Arr.from(value.screens.map(deviceJson))
+    )
+
+  private def deviceJson(value: ocelot.harness.core.project.DesktopLogicalDevice): ujson.Obj =
+    ujson.Obj(
+      "logicalId" -> value.logicalId,
+      "label" -> value.label.map(ujson.Str).getOrElse(ujson.Null)
+    )
+
+  private def inspectionHuman(value: DesktopWorkspaceInspection): String =
+    s"compatible Desktop workspace: ${value.computers.size} computers, ${value.screens.size} screens, ${value.additionalEntityCount} additional entities"
+
+  private def printResult(
+      json: Boolean,
+      value: ujson.Value,
+      human: ujson.Value => String
+  ): Unit =
+    if (json) System.out.println(ujson.write(value, indent = -1, escapeUnicode = false))
+    else System.out.println(human(value))
 
   private def parseGlobal(arguments: Vector[String]): Either[String, Global] = {
     @tailrec
@@ -315,7 +421,7 @@ object OcelotCtl {
   }
 
   private val usage =
-    "usage: ocelotctl [--project <path>] [--json] <version|workspace|machine|simulation|screen|snapshot|diagnostics> ..."
+    "usage: ocelotctl [--project <path>] [--json] <project|version|workspace|machine|simulation|screen|snapshot|diagnostics> ..."
 
   private[app] val ReferenceMarkdown: String =
     """# Ocelot Harness CLI reference
@@ -334,6 +440,9 @@ object OcelotCtl {
       |Commands:
       |
       |```text
+      |ocelotctl project inspect-desktop <desktop-directory> [--json]
+      |ocelotctl project import-desktop <desktop-directory> <project-directory> [--json]
+      |ocelotctl --project <project-directory> project validate [--json]
       |ocelotctl version
       |ocelotctl workspace describe
       |ocelotctl machine <start|stop|reset> <computer-id>
@@ -364,7 +473,7 @@ object OcelotCtl {
       |ocelot-harnessd serve <--stdio|--loopback> --project <path>
       |```
       |
-      |Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+      |Project inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
       |""".stripMargin
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])

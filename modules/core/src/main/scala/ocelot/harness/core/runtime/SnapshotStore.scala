@@ -79,7 +79,12 @@ private[runtime] object SnapshotStore {
             val copiedBytes = request.hostDisks match {
               case HostDiskSnapshotPolicy.ReferenceOnly => 0L
               case HostDiskSnapshotPolicy.Copy =>
-                copyHostDisks(project, temp.resolve("disks"), request.maxBytes - bytes.length)
+                copyHostDisks(
+                  project,
+                  constructed,
+                  temp.resolve("disks"),
+                  request.maxBytes - bytes.length
+                )
             }
             if (bytes.length.toLong + copiedBytes > request.maxBytes) {
               throw new SnapshotLimitException(
@@ -323,50 +328,58 @@ private[runtime] object SnapshotStore {
     }
   }
 
-  private def copyHostDisks(project: ValidatedProject, destination: Path, remaining: Long): Long = {
+  private def copyHostDisks(
+      project: ValidatedProject,
+      constructed: ConstructedWorkspace,
+      destination: Path,
+      remaining: Long
+  ): Long = {
     var total = 0L
     val excludedRoots = Vector(project.paths.artifacts, project.paths.snapshots)
       .map(_.toAbsolutePath.normalize())
-    project.computers.foreach { computer =>
-      computer.hardware.disks.foreach { disk =>
-        val sourceRoot = disk.source.toAbsolutePath.normalize()
-        val targetRoot = destination.resolve(computer.id.value).resolve(disk.id.value)
-        Files.walkFileTree(
-          sourceRoot,
-          new SimpleFileVisitor[Path] {
-            override def preVisitDirectory(
-                directory: Path,
-                attributes: BasicFileAttributes
-            ): FileVisitResult = {
-              val normalized = directory.toAbsolutePath.normalize()
-              if (directory != sourceRoot && excludedRoots.exists(normalized.startsWith)) {
-                FileVisitResult.SKIP_SUBTREE
-              } else if (Files.isSymbolicLink(directory)) {
-                throw new IllegalArgumentException("host disk copy does not follow symbolic links")
-              } else {
-                Files.createDirectories(
-                  targetRoot.resolve(sourceRoot.relativize(directory).toString)
-                )
-                FileVisitResult.CONTINUE
-              }
-            }
-
-            override def visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult = {
-              if (Files.isSymbolicLink(file)) {
-                throw new IllegalArgumentException("host disk copy does not follow symbolic links")
-              }
-              total += attributes.size()
-              if (total > remaining) {
-                throw new SnapshotLimitException("host disk copy exceeds snapshot byte limit")
-              }
-              val target = targetRoot.resolve(sourceRoot.relativize(file).toString)
-              Files.createDirectories(target.getParent)
-              Files.copy(file, target, StandardCopyOption.COPY_ATTRIBUTES)
+    constructed.managedDisks.foreach { case (key, source) =>
+      val sourceRoot = source.toRealPath()
+      val targetRoot = destination.resolve(key).normalize()
+      if (!targetRoot.startsWith(destination)) {
+        throw new IllegalArgumentException("managed disk snapshot key escapes its destination")
+      }
+      Files.walkFileTree(
+        sourceRoot,
+        new SimpleFileVisitor[Path] {
+          override def preVisitDirectory(
+              directory: Path,
+              attributes: BasicFileAttributes
+          ): FileVisitResult = {
+            val normalized = directory.toAbsolutePath.normalize()
+            if (directory != sourceRoot && excludedRoots.exists(normalized.startsWith)) {
+              FileVisitResult.SKIP_SUBTREE
+            } else if (
+              Files.isSymbolicLink(directory) || !directory.toRealPath().startsWith(sourceRoot)
+            ) {
+              throw new IllegalArgumentException("host disk copy does not follow path escapes")
+            } else {
+              Files.createDirectories(
+                targetRoot.resolve(sourceRoot.relativize(directory).toString)
+              )
               FileVisitResult.CONTINUE
             }
           }
-        )
-      }
+
+          override def visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult = {
+            if (Files.isSymbolicLink(file) || !file.toRealPath().startsWith(sourceRoot)) {
+              throw new IllegalArgumentException("host disk copy does not follow path escapes")
+            }
+            total += attributes.size()
+            if (total > remaining) {
+              throw new SnapshotLimitException("host disk copy exceeds snapshot byte limit")
+            }
+            val target = targetRoot.resolve(sourceRoot.relativize(file).toString)
+            Files.createDirectories(target.getParent)
+            Files.copy(file, target, StandardCopyOption.COPY_ATTRIBUTES)
+            FileVisitResult.CONTINUE
+          }
+        }
+      )
     }
     total
   }

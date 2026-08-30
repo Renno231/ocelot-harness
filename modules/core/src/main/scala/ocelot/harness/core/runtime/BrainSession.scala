@@ -28,6 +28,7 @@ private[runtime] final class BrainSession(
     initialWorkspace: Workspace,
     private val project: Option[ValidatedProject],
     initialConstructed: Option[ConstructedWorkspace],
+    private val workspaceSource: Option[WorkspaceSourceAdapter],
     brainVersion: String,
     sessionClosed: BrainSession => Unit
 ) extends HarnessSession {
@@ -111,13 +112,12 @@ private[runtime] final class BrainSession(
       input: UserInput
   ): Either[HarnessError, InputResult] = command {
     screen(id).flatMap { value =>
-      val definition = project.toVector.flatMap(_.screens).find(_.id == id)
-      definition match {
-        case Some(screenDefinition) =>
+      constructed.flatMap(_.screenTiers.get(id)) match {
+        case Some(screenTier) =>
           inputController.send(
             value,
             constructed.flatMap(_.keyboards.get(id)),
-            screenDefinition.tier,
+            screenTier,
             input,
             () => workspace.update()
           )
@@ -150,7 +150,10 @@ private[runtime] final class BrainSession(
               disposeWorkspace(candidate)
               Left(SnapshotCorrupt("workspace tick does not match snapshot metadata"))
             } else {
-              val candidateTopology = HardwareCatalog.restore(value, candidate, loaded.identity)
+              val candidateTopology = workspaceSource
+                .toRight(SnapshotInvalid("snapshot workspace source is unavailable"))
+                .map(_.restore(candidate, loaded.identity))
+                .fold(error => throw new IllegalArgumentException(error.message), identity)
               val revisionBase =
                 screenSnapshots().valuesIterator.map(_.revision).foldLeft(0L)(math.max)
               val previous = workspace

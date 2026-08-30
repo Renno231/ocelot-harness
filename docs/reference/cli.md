@@ -14,6 +14,9 @@ Global options:
 Commands:
 
 ```text
+ocelotctl project inspect-desktop <desktop-directory> [--json]
+ocelotctl project import-desktop <desktop-directory> <project-directory> [--json]
+ocelotctl --project <project-directory> project validate [--json]
 ocelotctl version
 ocelotctl workspace describe
 ocelotctl machine <start|stop|reset> <computer-id>
@@ -44,4 +47,4 @@ ocelot-harnessd force-stop --project <path>
 ocelot-harnessd serve <--stdio|--loopback> --project <path>
 ```
 
-Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+Project inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.

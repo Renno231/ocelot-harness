@@ -24,7 +24,7 @@ import ocelot.harness.core.project.MemoryTier.{
 
 object ProjectLoader {
   val ManifestFileName: String = "ocelot-harness.conf"
-  private val SupportedSchemaVersion = 1
+  private val SupportedSchemaVersions = Set(1, 2)
 
   def load(
       root: Path,
@@ -42,14 +42,14 @@ object ProjectLoader {
         parseManifest(projectRoot, manifest).flatMap { config =>
           schemaVersion(config) match {
             case Left(error) => Left(ProjectErrors.from(Vector(error)))
-            case Right(version) if version != SupportedSchemaVersion =>
+            case Right(version) if !SupportedSchemaVersions.contains(version) =>
               Left(
                 ProjectErrors.from(
                   Vector(
                     ProjectError(
                       "schemaVersion",
                       "unsupported_schema",
-                      s"schema version $version is unsupported; expected $SupportedSchemaVersion"
+                      s"schema version $version is unsupported; expected 1 or 2"
                     )
                   )
                 )
@@ -213,19 +213,18 @@ object ProjectLoader {
     def read(): Either[ProjectErrors, ValidatedProject] = {
       validateServiceLimits()
       canonicalAllowedRoots
-      rejectUnknown(
-        "",
-        Set(
-          "schemaVersion",
-          "project",
-          "runtime",
-          "computers",
-          "screens",
-          "connections",
-          "extensions"
-        )
-      )
+      val rootKeys = Set(
+        "schemaVersion",
+        "project",
+        "runtime",
+        "computers",
+        "screens",
+        "connections",
+        "extensions"
+      ) ++ (if (version == 2) Set("workspace") else Set.empty)
+      rejectUnknown("", rootKeys)
       rejectUnknown("project", Set("id", "artifactDirectory", "snapshotDirectory"))
+      if (version == 2) rejectUnknown("workspace", Set("kind", "directory"))
       rejectUnknown("runtime", Set("tickRate", "internet", "limits"))
       rejectUnknown("runtime.internet", Set("http", "tcp"))
       rejectUnknown(
@@ -236,9 +235,26 @@ object ProjectLoader {
       val id = requiredString("project.id").flatMap(parseProjectId("project.id", _))
       val paths = readPaths()
       val runtime = readRuntime()
-      val computers = readComputers()
-      val screens = readScreens()
-      val connections = readConnections(computers, screens)
+      val workspaceSource = readWorkspaceSource()
+      val desktopSelected =
+        version == 2 && config.hasPath("workspace.kind") &&
+          (try config.getString("workspace.kind") == "desktop"
+          catch { case NonFatal(_) => false })
+      if (desktopSelected) {
+        Vector("computers", "screens", "connections").foreach { path =>
+          if (config.hasPath(path)) {
+            invalid(
+              path,
+              "Desktop workspace sources cannot declare manifest topology",
+              "source_conflict"
+            )
+          }
+        }
+      }
+      val computers = if (desktopSelected) Vector.empty else readComputers()
+      val screens = if (desktopSelected) Vector.empty else readScreens()
+      val connections =
+        if (desktopSelected) Vector.empty else readConnections(computers, screens)
 
       if (errors.nonEmpty) Left(ProjectErrors.from(errors.toVector))
       else {
@@ -248,11 +264,33 @@ object ProjectLoader {
             id.get,
             paths.get,
             runtime,
+            workspaceSource.get,
             computers,
             screens,
             connections
           )
         )
+      }
+    }
+
+    private def readWorkspaceSource(): Option[WorkspaceSourceDefinition] = {
+      if (version == 1) Some(WorkspaceSourceDefinition.Manifest)
+      else {
+        requiredString("workspace.kind").flatMap {
+          case "manifest" =>
+            if (config.hasPath("workspace.directory")) {
+              invalid("workspace.directory", "manifest sources do not use a directory")
+            }
+            Some(WorkspaceSourceDefinition.Manifest)
+          case "desktop" =>
+            requiredString("workspace.directory").flatMap { value =>
+              canonicalDesktopSource("workspace.directory", value)
+                .map(WorkspaceSourceDefinition.Desktop)
+            }
+          case other =>
+            invalid("workspace.kind", s"unsupported workspace source: $other")
+            None
+        }
       }
     }
 
@@ -577,6 +615,29 @@ object ProjectLoader {
           None
         case Left(message) =>
           invalid(path, message, "invalid_path")
+          None
+      }
+    }
+
+    private def canonicalDesktopSource(path: String, value: String): Option[Path] = {
+      val candidate = resolveManifestRelative(value)
+      try {
+        val canonical = candidate.toRealPath()
+        if (!canonical.startsWith(projectRoot)) {
+          invalid(path, s"path escapes the project root: $canonical", "path_not_allowed")
+          None
+        } else if (!Files.isDirectory(canonical, LinkOption.NOFOLLOW_LINKS)) {
+          invalid(path, "Desktop source must be an existing directory", "invalid_path")
+          None
+        } else if (
+          !Files.isRegularFile(canonical.resolve("workspace.nbt"), LinkOption.NOFOLLOW_LINKS)
+        ) {
+          invalid(path, "Desktop source must contain workspace.nbt", "invalid_path")
+          None
+        } else Some(canonical)
+      } catch {
+        case NonFatal(error) =>
+          invalid(path, errorMessage(error), "invalid_path")
           None
       }
     }

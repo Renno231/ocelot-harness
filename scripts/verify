@@ -42,6 +42,12 @@ case "$viewer_help" in
 esac
 printf '%s\n' 'PASS: packaged viewer entrypoint'
 
+cli_help=$("$script_directory/ocelotctl" --help)
+printf '%s\n' "$cli_help" | grep -Fq 'project inspect-desktop'
+printf '%s\n' "$cli_help" | grep -Fq 'project import-desktop'
+printf '%s\n' "$cli_help" | grep -Fq 'project validate'
+printf '%s\n' 'PASS: packaged Desktop project commands'
+
 smoke_directory=$(mktemp -d "${TMPDIR:-/tmp}/ocelot-harness-smoke.XXXXXX")
 trap 'rm -rf "$smoke_directory"' EXIT HUP INT TERM
 protocol_input="$smoke_directory/input.ndjson"

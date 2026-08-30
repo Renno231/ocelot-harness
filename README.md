@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. The approved workspace/runtime expansion adds compatible Ocelot Desktop workspace import, broader deterministic project construction, and continuous configurable simulation time.
+Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, bounded schema-v1 project construction, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. Workspace-expansion Stage 1 now imports compatible Ocelot Desktop workspaces; broader deterministic schema-v2 construction and continuous configurable simulation time remain approved follow-on stages.
 
 Start here:
 
@@ -24,6 +24,8 @@ Start here:
 ## Implemented capabilities
 
 - versioned HOCON project manifests with stable logical device IDs
+- bounded import of compatible Ocelot Desktop workspaces with complete brain-graph preservation
+- deterministic label/UUID identity binding across reopen and snapshot restore
 - validated tier-1, tier-2, and tier-3 computer/screen profiles with service-owned topology caps
 - host-directory-backed managed disks with canonical allowed-root policy
 - machine start, stop, reset, and condition-driven bounded simulation
@@ -41,7 +43,7 @@ Start here:
 - an isolated vertical fixture and forked real-brain multi-device integration project
 - independent computers, screens, host disks, targeted input paths, diagnostics, and configured network connectivity
 - exact harness/brain commit identity in packaged protocol responses
-- checked-in [CLI reference](docs/reference/cli.md), [live-viewer guide](docs/reference/viewer.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
+- checked-in [CLI reference](docs/reference/cli.md), [Desktop import guide](docs/reference/desktop-import.md), [live-viewer guide](docs/reference/viewer.md), [two-computer example](examples/two-computers/), [SBOM](docs/release/sbom.cdx.json), [dependency report](docs/release/dependencies.md), and [third-party notices](THIRD_PARTY_NOTICES.md)
 
 The optional viewer renders and controls emulated screens only. Ocelot Desktop canvas/window automation remains outside the harness.
 
@@ -71,12 +73,24 @@ scripts\verify.cmd      # Windows Command Prompt or PowerShell
 
 The scripts verify the submodule pin, checked SBT bootstrap, formatting, strict first-party compilation, tests, assembly, packaged viewer entrypoint, exact build identity, and a packaged stdio protocol smoke that boots the real-brain fixture, captures a PNG, saves and restores a snapshot, injects touch and paste, emits diagnostics, and shuts down cleanly with protocol-only stdout.
 
+## Import a Desktop workspace
+
+Inspect and import a compatible saved Ocelot Desktop directory without starting a daemon:
+
+```text
+scripts\ocelotctl.cmd project inspect-desktop <desktop-directory> --json
+scripts\ocelotctl.cmd project import-desktop <desktop-directory> <project-directory> --json
+scripts\ocelotctl.cmd --project <project-directory> project validate
+```
+
+The importer copies bounded source data, preserves the complete brain entity/edge graph, assigns stable logical IDs to discovered computers and screens, safely rebinds contained managed disks, and leaves the original directory unchanged. See the [Desktop import guide](docs/reference/desktop-import.md) for compatibility and security boundaries.
+
 ## Live viewer
 
 Start the loopback daemon, then attach the separate Swing viewer to the same session:
 
 ```text
-java -jar modules/app/target/ocelot-harness.jar up --project examples/two-computers
+scripts\ocelot-harnessd.cmd up --project examples/two-computers
 scripts\ocelot-viewer.cmd --project examples/two-computers --screen alpha
 ```
 

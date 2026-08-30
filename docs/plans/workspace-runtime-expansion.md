@@ -1,6 +1,6 @@
 # Workspace and runtime expansion plan
 
-- **Status:** Approved
+- **Status:** Active — Stage 1 complete; Stages 2 and 3 approved
 - **Baseline:** Ocelot Harness `bf4ec34`, ocelot-brain `bec1cc6`
 - **Compatibility target:** Ocelot Desktop `586d6ef` workspace format using the same brain commit
 - **Execution:** three cohesive stages, each reconciled before one canonical verification and one commit
@@ -165,6 +165,10 @@ ocelotctl simulation status [--json]
 The viewer displays clock state, target TPS, measured TPS, and overruns. Viewer polling observes state and never owns simulation time.
 
 ## Stage 1 — Desktop workspace import
+
+**Status:** Complete
+
+Delivered one bounded local inspect/import/validate path, schema-v1 compatibility plus the schema-v2 source envelope, private manifest/Desktop source adapters, stable label-and-UUID logical identity, contained managed-disk copying/rebinding and archival, complete compatible brain entity/edge preservation, source and metadata checksums, and transactional imported snapshot restore. The forked real-brain acceptance imports two computers, two screens, two keyboards, their managed disks, and an auxiliary relay; it boots and controls both computers, preserves seven entities and at least four serialized edges across restore, reopens with identical logical IDs, and proves a failed candidate restore leaves the active session unchanged.
 
 ### Tests first
 

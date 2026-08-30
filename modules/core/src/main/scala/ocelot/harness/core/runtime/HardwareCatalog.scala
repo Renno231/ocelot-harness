@@ -27,7 +27,9 @@ private[runtime] final case class ConstructedWorkspace(
     description: WorkspaceDescription,
     computers: Map[ComputerId, BrainCase],
     screens: Map[ScreenId, Screen],
-    keyboards: Map[ScreenId, Keyboard]
+    keyboards: Map[ScreenId, Keyboard],
+    screenTiers: Map[ScreenId, Int],
+    managedDisks: Vector[(String, java.nio.file.Path)]
 )
 
 private[runtime] object HardwareCatalog {
@@ -156,7 +158,13 @@ private[runtime] object HardwareCatalog {
         WorkspaceDescription(project.id, computers, screens, project.connections),
         computersById,
         screensById.view.mapValues(_._1).toMap,
-        screensById.collect { case (id, (_, Some(keyboard))) => id -> keyboard }
+        screensById.collect { case (id, (_, Some(keyboard))) => id -> keyboard },
+        project.screens.map(value => value.id -> value.tier).toMap,
+        project.computers.flatMap(computer =>
+          computer.hardware.disks.map(disk =>
+            s"${computer.id.value}/${disk.id.value}" -> disk.source
+          )
+        )
       )
     } catch {
       case NonFatal(error) =>
@@ -356,7 +364,11 @@ private[runtime] object HardwareCatalog {
       ),
       computersById,
       screensById,
-      screens.collect { case (id, (_, Some(keyboard), _)) => id -> keyboard }.toMap
+      screens.collect { case (id, (_, Some(keyboard), _)) => id -> keyboard }.toMap,
+      project.screens.map(value => value.id -> value.tier).toMap,
+      project.computers.flatMap(computer =>
+        computer.hardware.disks.map(disk => s"${computer.id.value}/${disk.id.value}" -> disk.source)
+      )
     )
   }
 

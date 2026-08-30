@@ -5,7 +5,7 @@
 Ocelot Harness runs three classes of untrusted input:
 
 ```text
-project manifest
+project manifest or imported Desktop workspace
 client protocol requests
 OpenComputers programs running inside ocelot-brain
 ```
@@ -21,6 +21,16 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 - Additional host roots are granted by service startup policy, never by the manifest alone.
 - Artifacts, runtime metadata, and snapshots remain under their configured canonical roots.
 - Artifact and snapshot publication uses temporary files followed by atomic replacement where supported.
+
+### Desktop workspace import
+
+- Import requires the compatible pinned brain serialization format and preflights every serialized entity class before loading.
+- Compressed NBT, decompressed allocations, entity/edge counts, copied file count, and copied bytes have hard ceilings.
+- Source copies reject symbolic links, junction escapes, and special files.
+- Managed-disk paths must resolve beneath the source and are rebound beneath the copied project.
+- Private identity metadata is bounded, include-free, checksummed against `workspace.nbt`, and validated before runtime construction.
+- Candidate workspace and snapshot loads are transactional; failure leaves an active session unchanged.
+- The original Desktop workspace is read-only input and is never rewritten.
 
 ### Network
 

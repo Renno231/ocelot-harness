@@ -1,12 +1,16 @@
 package ocelot.harness.app
 
+import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
 import ocelot.harness.app.protocol.AppExitCode
+import totoro.ocelot.brain.nbt.{CompressedStreamTools, NBTBase, NBTTagCompound}
 
 final class OcelotCtlSpec extends AnyFunSuite with Matchers {
   test("checked-in CLI reference is generated from the executable command contract") {
@@ -82,6 +86,45 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
     } finally Files.delete(project)
   }
 
+  test("local Desktop inspect, import, and project validation do not require a daemon") {
+    val parent = Files.createTempDirectory("ocelot-harness-local-project-cli-")
+    val source = Files.createDirectory(parent.resolve("desktop-source"))
+    val destination = parent.resolve("imported")
+    val back = new NBTTagCompound()
+    back.setTagList("entities", Vector.empty[NBTBase].asJava)
+    back.setTagList("edges", Vector.empty[NBTBase].asJava)
+    val root = new NBTTagCompound()
+    root.setTag("back", back)
+    root.setTag("front", new NBTTagCompound())
+    Files.write(source.resolve("workspace.nbt"), CompressedStreamTools.write(root))
+
+    try {
+      val (inspectExit, inspectOut) = capture(
+        OcelotCtl.run(Array("project", "inspect-desktop", source.toString, "--json"))
+      )
+      inspectExit shouldBe AppExitCode.Success
+      ujson.read(inspectOut)("entityCount").num shouldBe 0
+
+      val (importExit, importOut) = capture(
+        OcelotCtl.run(
+          Array("project", "import-desktop", source.toString, destination.toString, "--json")
+        )
+      )
+      importExit shouldBe AppExitCode.Success
+      ujson.read(importOut)("projectRoot").str shouldBe destination.toRealPath().toString
+
+      val (validateExit, validateOut) = capture(
+        OcelotCtl.run(Array("--project", destination.toString, "project", "validate", "--json"))
+      )
+      validateExit shouldBe AppExitCode.Success
+      ujson.read(validateOut)("schemaVersion").num shouldBe 2
+    } finally {
+      val paths = Files.walk(parent)
+      try paths.iterator().asScala.toVector.reverse.foreach(Files.deleteIfExists)
+      finally paths.close()
+    }
+  }
+
   test("CLI durations reject numeric overflow") {
     OcelotCtl.run(
       Array(
@@ -94,5 +137,21 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
         "999999999999999999999s"
       )
     ) shouldBe AppExitCode.Usage
+  }
+
+  private def capture(operation: => Int): (Int, String) = {
+    val stdout = new ByteArrayOutputStream()
+    val stderr = new ByteArrayOutputStream()
+    val originalOut = System.out
+    val originalErr = System.err
+    try {
+      System.setOut(new PrintStream(stdout, true, "UTF-8"))
+      System.setErr(new PrintStream(stderr, true, "UTF-8"))
+      val exit = operation
+      exit -> new String(stdout.toByteArray, StandardCharsets.UTF_8).trim
+    } finally {
+      System.setOut(originalOut)
+      System.setErr(originalErr)
+    }
   }
 }

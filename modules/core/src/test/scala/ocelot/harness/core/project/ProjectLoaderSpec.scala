@@ -76,8 +76,49 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
     }
   }
 
+  test("schema v2 selects a canonical project-contained Desktop workspace source") {
+    withProject(
+      """schemaVersion = 2
+        |project { id = "desktop-demo" }
+        |workspace { kind = "desktop", directory = "./desktop" }
+        |runtime { }
+        |""".stripMargin
+    ) { root =>
+      val desktop = Files.createDirectories(root.resolve("desktop"))
+      Files.write(desktop.resolve("workspace.nbt"), Array[Byte](1, 2, 3))
+
+      val project = ProjectLoader.load(root).value
+
+      project.schemaVersion shouldBe 2
+      project.computers shouldBe empty
+      project.screens shouldBe empty
+      project.connections shouldBe empty
+      project.workspaceSource shouldBe WorkspaceSourceDefinition.Desktop(desktop.toRealPath())
+    }
+  }
+
+  test("schema-v2 Desktop sources cannot escape the project or mix manifest topology") {
+    withTempDirectory { parent =>
+      val root = Files.createDirectory(parent.resolve("project"))
+      val outside = Files.createDirectory(parent.resolve("outside"))
+      writeManifest(
+        root,
+        s"""schemaVersion = 2
+           |project { id = "desktop-demo" }
+           |workspace { kind = "desktop", directory = "${outside.toString.replace('\\', '/')}" }
+           |runtime { }
+           |computers { main = {} }
+           |""".stripMargin
+      )
+
+      val errors = ProjectLoader.load(root).left.value.errors
+      errors.map(_.path) should contain allElementsOf Vector("workspace.directory", "computers")
+      errors.map(_.code) should contain allElementsOf Vector("path_not_allowed", "source_conflict")
+    }
+  }
+
   test("an unsupported schema is rejected before project fields are interpreted") {
-    withProject("schemaVersion = 2\nproject.id = \"Bad ID\"\n") { root =>
+    withProject("schemaVersion = 3\nproject.id = \"Bad ID\"\n") { root =>
       val errors = ProjectLoader.load(root).left.value.errors
 
       errors.map(_.code) shouldBe Vector("unsupported_schema")

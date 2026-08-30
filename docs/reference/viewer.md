@@ -22,7 +22,7 @@ scripts/sbtw "harnessApp/assembly"          # POSIX
 Start a persistent project session and launch the viewer:
 
 ```text
-java -jar modules/app/target/ocelot-harness.jar up --project examples/two-computers
+scripts\ocelot-harnessd.cmd up --project examples/two-computers
 scripts\ocelot-viewer.cmd --project examples/two-computers --screen alpha
 ```
 
@@ -35,7 +35,7 @@ scripts/ocelot-viewer --project examples/two-computers --screen alpha
 The daemon must already be running. Closing the window closes only its authenticated client connection; it does not stop the daemon. Stop the project separately:
 
 ```text
-java -jar modules/app/target/ocelot-harness.jar down --project examples/two-computers
+scripts\ocelot-harnessd.cmd down --project examples/two-computers
 ```
 
 ## Options
