@@ -16,6 +16,14 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
     val workDirectory = Files.createTempDirectory("ocelot-harness-loopback-")
     val projectDirectory = workDirectory.resolve("project with spaces")
     copyTree(verticalFixture, projectDirectory)
+    val manifest = projectDirectory.resolve("ocelot-harness.conf")
+    val schemaV2 = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+      .replace(
+        "schemaVersion = 1",
+        "schemaVersion = 2\nworkspace { kind = \"manifest\" }"
+      )
+      .replace("tickRate = 20", "tickRate = 20\n  clock { autoStart = true }")
+    Files.write(manifest, schemaV2.getBytes(StandardCharsets.UTF_8))
 
     try {
       val up = runJava(
@@ -64,6 +72,11 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
       }
 
       runCtl(workDirectory, projectDirectory, "machine", "start", "main")
+      eventually(10000L) {
+        LoopbackClient
+          .call(projectDirectory, "screen.read", ujson.Obj("screenId" -> "main"))
+          .exists(value => value("text").str.contains("READY"))
+      } shouldBe true
       val ready = runCtl(
         workDirectory,
         projectDirectory,
@@ -95,6 +108,33 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
           .call(projectDirectory, "screen.read", ujson.Obj("screenId" -> "main"))
           .fold(error => fail(error.message), value => value)
         concurrentOneShot("screenId").str shouldBe "main"
+
+        val running = persistent
+          .call("simulation.status")
+          .fold(error => fail(error.message), identity)
+        running("state").str shouldBe "running"
+        running("targetTps").num.toInt shouldBe 20
+        val paused = runCtl(workDirectory, projectDirectory, "simulation", "pause")
+        val frozenTicks = java.lang.Long.parseLong(paused("totalTicks").str)
+        Thread.sleep(150L)
+        java.lang.Long.parseLong(
+          persistent
+            .call("simulation.status")
+            .fold(error => fail(error.message), identity)("totalTicks")
+            .str
+        ) shouldBe frozenTicks
+        val stepped = runCtl(workDirectory, projectDirectory, "simulation", "step", "3")
+        java.lang.Long.parseLong(stepped("totalTicks").str) shouldBe frozenTicks + 3L
+        runCtl(workDirectory, projectDirectory, "simulation", "rate", "100")(
+          "targetTps"
+        ).num.toInt shouldBe 100
+        val resumed = runCtl(workDirectory, projectDirectory, "simulation", "resume")
+        val resumeTicks = java.lang.Long.parseLong(resumed("totalTicks").str)
+        eventually(3000L) {
+          persistent
+            .call("simulation.status")
+            .exists(value => java.lang.Long.parseLong(value("totalTicks").str) >= resumeTicks + 10L)
+        } shouldBe true
       } finally persistent.close()
 
       val executor = Executors.newFixedThreadPool(4)

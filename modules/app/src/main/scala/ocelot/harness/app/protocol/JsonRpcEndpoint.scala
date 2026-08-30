@@ -60,6 +60,12 @@ private[app] final class JsonRpcEndpoint(
         case "machine.stop"       => machine(call.params, session.stopMachine)
         case "machine.reset"      => machine(call.params, session.resetMachine)
         case "simulation.run"     => run(call.params)
+        case "simulation.start"   => startClock(call.params)
+        case "simulation.pause"   => domain(session.pauseClock()).map(JsonCodec.clock)
+        case "simulation.resume"  => domain(session.resumeClock()).map(JsonCodec.clock)
+        case "simulation.step"    => stepClock(call.params)
+        case "simulation.rate"    => rateClock(call.params)
+        case "simulation.status"  => domain(session.clockStatus()).map(JsonCodec.clock)
         case "screen.read" =>
           screenId(call.params).flatMap(id => domain(session.readScreen(id))).map(JsonCodec.screen)
         case "screen.input"        => input(call.params)
@@ -127,6 +133,27 @@ private[app] final class JsonRpcEndpoint(
         )
       )
     } yield JsonCodec.run(result)
+
+  private def startClock(params: ujson.Obj): Either[RpcFailure, ujson.Value] = {
+    val requested =
+      if (params.value.contains("tps")) boundedPositiveInt(params, "tps", 1000).map(Some(_))
+      else Right(None)
+    requested.flatMap(value => domain(session.startClock(value))).map(JsonCodec.clock)
+  }
+
+  private def stepClock(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    optionalInt(params, "count", 1)
+      .flatMap { count =>
+        if (count >= 1 && count <= 10000) Right(count)
+        else Left(RpcFailure.invalidParams("count must be between 1 and 10000"))
+      }
+      .flatMap(count => domain(session.stepClock(count)))
+      .map(JsonCodec.clock)
+
+  private def rateClock(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    boundedPositiveInt(params, "tps", 1000)
+      .flatMap(tps => domain(session.setClockRate(tps)))
+      .map(JsonCodec.clock)
 
   private def input(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
     for {
@@ -567,6 +594,16 @@ private object JsonCodec {
       "computerId" -> value.id.value,
       "state" -> machineStateName(value.state),
       "lastError" -> value.lastError.map[ujson.Value](ujson.Str).getOrElse(ujson.Null)
+    )
+
+  def clock(value: SimulationClockStatus): ujson.Value =
+    ujson.Obj(
+      "state" -> value.state.name,
+      "targetTps" -> value.targetTps,
+      "measuredTps" -> value.measuredTps,
+      "totalTicks" -> int64(value.totalTicks),
+      "overrunCount" -> int64(value.overrunCount),
+      "lastTickDurationNanos" -> int64(value.lastTickDurationNanos)
     )
 
   def screen(value: ScreenSnapshot): ujson.Value =

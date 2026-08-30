@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Status
 
-Phase 1 is implemented. The six completed milestones provide a reproducible Java 8/SBT build, sole process-global lifecycle ownership, serialized interactive execution, deterministic artifacts and recovery, versioned external control, multi-device coverage, and release evidence on Windows and Linux. Workspace-expansion Stages 1–2 add compatible Ocelot Desktop import plus deterministic schema-v2 construction and project authoring; continuous configurable simulation time remains the final approved expansion stage.
+Phase 1 and the workspace/runtime expansion are implemented. The harness provides reproducible Java 8/SBT builds, sole process-global lifecycle ownership, compatible Ocelot Desktop import, deterministic schema-v2 workspace authoring, serialized interactive execution, daemon-owned continuous simulation time, deterministic artifacts and recovery, versioned external control, live viewing, multi-device coverage, and release evidence on Windows and Linux.
 
 Start here:
 
@@ -31,7 +31,7 @@ Start here:
 - typed device/port topology with service-owned device, inventory, connection, computer, screen, and storage caps
 - local runnable project templates for single-computer, two-computer, rack/server, and mixed-network environments
 - host-directory-backed managed disks with canonical allowed-root policy
-- machine start, stop, reset, and condition-driven bounded simulation
+- machine start, stop, reset, condition-driven bounded runs, and continuous configurable 1–1000 TPS simulation
 - immutable Unicode text/cell/color/palette screen snapshots
 - key, typed-text, paste, touch, drag, drop, and scroll input
 - bounded events and run-failure observations
@@ -106,10 +106,22 @@ Start the loopback daemon, then attach the separate Swing viewer to the same ses
 
 ```text
 scripts\ocelot-harnessd.cmd up --project examples/two-computers
+scripts\ocelotctl.cmd --project examples/two-computers machine start alpha
+scripts\ocelotctl.cmd --project examples/two-computers simulation start --tps 20
 scripts\ocelot-viewer.cmd --project examples/two-computers --screen alpha
 ```
 
-The daemon remains headless and can be controlled concurrently through `ocelotctl`; closing the window does not stop it. See the [live-viewer guide](docs/reference/viewer.md) for POSIX usage, controls, scaling, and refresh bounds.
+Schema-v2 projects auto-start their simulation clock at the manifest `runtime.tickRate` (20 TPS by default). The viewer displays target/measured TPS and overruns and provides pause/resume, exact single-step, and rate controls. The daemon remains headless and can be controlled concurrently through `ocelotctl`; closing the window does not stop it. See the [live-viewer guide](docs/reference/viewer.md) for POSIX usage, controls, scaling, and refresh bounds.
+
+Clock control is also available without the viewer:
+
+```text
+scripts\ocelotctl.cmd --project demo simulation status
+scripts\ocelotctl.cmd --project demo simulation rate 100
+scripts\ocelotctl.cmd --project demo simulation pause
+scripts\ocelotctl.cmd --project demo simulation step 1
+scripts\ocelotctl.cmd --project demo simulation resume
+```
 
 ## License
 

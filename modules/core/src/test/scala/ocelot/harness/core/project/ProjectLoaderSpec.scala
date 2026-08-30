@@ -21,6 +21,7 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
       project.paths.artifacts shouldBe root.resolve(".ocelot-harness/artifacts").toAbsolutePath
       project.paths.snapshots shouldBe root.resolve(".ocelot-harness/snapshots").toAbsolutePath
       project.runtime.tickRate shouldBe 20
+      project.runtime.clockAutoStart shouldBe false
       project.runtime.limits.defaultMaxTicks shouldBe 1000
       project.runtime.limits.defaultMaxWallTimeMillis shouldBe 30000L
       project.runtime.limits.eventBufferSize shouldBe 10000
@@ -94,6 +95,33 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
       project.screens shouldBe empty
       project.connections shouldBe empty
       project.workspaceSource shouldBe WorkspaceSourceDefinition.Desktop(desktop.toRealPath())
+      project.runtime.clockAutoStart shouldBe true
+    }
+  }
+
+  test("schema-v2 clock settings are explicit and target TPS is bounded") {
+    withTempDirectory { parent =>
+      val root = parent.resolve("clock")
+      ProjectTemplates.initialize(root, "single-computer").value
+      val manifest = root.resolve(ProjectLoader.ManifestFileName)
+      val original = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8)
+      Files.write(
+        manifest,
+        original
+          .replace("tickRate = 20", "tickRate = 1000")
+          .replace("clock { autoStart = true }", "clock { autoStart = false }")
+          .getBytes(StandardCharsets.UTF_8)
+      )
+
+      val project = ProjectLoader.load(root).value
+      project.runtime.tickRate shouldBe 1000
+      project.runtime.clockAutoStart shouldBe false
+
+      Files.write(
+        manifest,
+        original.replace("tickRate = 20", "tickRate = 1001").getBytes(StandardCharsets.UTF_8)
+      )
+      ProjectLoader.load(root).left.value.errors.map(_.path) should contain("runtime.tickRate")
     }
   }
 

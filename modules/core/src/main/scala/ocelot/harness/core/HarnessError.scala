@@ -56,6 +56,10 @@ object HarnessError {
     override val code: String = "invalid_run_request"
   }
 
+  final case class InvalidClockRequest(message: String) extends HarnessError {
+    override val code: String = "invalid_clock_request"
+  }
+
   final case class InvalidInput(message: String) extends HarnessError {
     override val code: String = "invalid_input"
   }

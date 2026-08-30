@@ -78,6 +78,39 @@ final class ViewerModelSpec extends AnyFunSuite with Matchers {
     ViewerProtocol.decodeScreen(base).left.toOption.get should include("revision")
   }
 
+  test("clock wire status decodes lossless counters and rejects invalid state") {
+    val status = ViewerProtocol.decodeClock(
+      ujson.Obj(
+        "state" -> "running",
+        "targetTps" -> 100,
+        "measuredTps" -> 98.5,
+        "totalTicks" -> "9007199254740993",
+        "overrunCount" -> "7",
+        "lastTickDurationNanos" -> "250000"
+      )
+    )
+
+    withClue(status) { status.isRight shouldBe true }
+    status.toOption.get.state shouldBe "running"
+    status.toOption.get.totalTicks shouldBe 9007199254740993L
+    status.toOption.get.measuredTps shouldBe 98.5
+
+    ViewerProtocol
+      .decodeClock(
+        ujson.Obj(
+          "state" -> "stopped",
+          "targetTps" -> 20,
+          "measuredTps" -> 0,
+          "totalTicks" -> "0",
+          "overrunCount" -> "0",
+          "lastTickDurationNanos" -> "0"
+        )
+      )
+      .left
+      .toOption
+      .get should include("state")
+  }
+
   test("workspace screen IDs decode in server order and reject invalid IDs") {
     val result = ViewerProtocol.decodeScreenIds(
       ujson.Obj(

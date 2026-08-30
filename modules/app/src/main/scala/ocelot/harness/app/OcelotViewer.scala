@@ -1,6 +1,6 @@
 package ocelot.harness.app
 
-import java.awt.{BorderLayout, Color, Dimension, Graphics, GraphicsEnvironment, Toolkit}
+import java.awt.{BorderLayout, Color, Dimension, FlowLayout, Graphics, GraphicsEnvironment, Toolkit}
 import java.awt.datatransfer.DataFlavor
 import java.awt.event.{
   ActionEvent,
@@ -30,6 +30,8 @@ import javax.swing.{
   JLabel,
   JPanel,
   JScrollPane,
+  JSpinner,
+  SpinnerNumberModel,
   SwingUtilities,
   Timer,
   WindowConstants
@@ -39,7 +41,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import ocelot.harness.app.protocol.{AppExitCode, LoopbackConnection, RpcClientFailure}
-import ocelot.harness.app.viewer.{ViewerCell, ViewerGeometry, ViewerProtocol}
+import ocelot.harness.app.viewer.{ViewerCell, ViewerClockStatus, ViewerGeometry, ViewerProtocol}
 import ocelot.harness.core.artifact.{RenderOptions, ScreenRenderer}
 import ocelot.harness.core.project.ScreenId
 import ocelot.harness.core.workspace.ScreenSnapshot
@@ -192,6 +194,7 @@ private final class ViewerWindow(
   private val closed = new AtomicBoolean(false)
   private val selectedScreen = new AtomicReference[String](initialScreen.value)
   private val lastRendered = new AtomicReference[(String, Long)](null)
+  private val currentClock = new AtomicReference[ViewerClockStatus](null)
   private val refreshPending = new AtomicBoolean(false)
   private val worker = new ThreadPoolExecutor(
     1,
@@ -208,6 +211,10 @@ private final class ViewerWindow(
   private val status = new JLabel("Connecting…")
   private val screenPanel = new ViewerScreenPanel(handleGesture, handleScroll, handleKey)
   private val selector = new JComboBox[String](screenIds.map(_.value).toArray)
+  private val clockToggle = new JButton("Pause")
+  private val clockStep = new JButton("Step")
+  private val targetTps = new JSpinner(new SpinnerNumberModel(20, 1, 1000, 1))
+  private val setRate = new JButton("Set TPS")
 
   def open(): Unit = {
     frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE)
@@ -224,13 +231,29 @@ private final class ViewerWindow(
     })
 
     val paste = new JButton("Paste clipboard")
+    clockStep.setEnabled(false)
     paste.addActionListener((_: ActionEvent) => pasteClipboard())
+    clockToggle.addActionListener((_: ActionEvent) => toggleClock())
+    clockStep.addActionListener((_: ActionEvent) =>
+      submitClock("simulation.step", ujson.Obj("count" -> 1))
+    )
+    setRate.addActionListener((_: ActionEvent) => {
+      val tps = targetTps.getValue.asInstanceOf[Number].intValue()
+      submitClock("simulation.rate", ujson.Obj("tps" -> tps))
+    })
+
+    val actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
+    actions.add(clockToggle)
+    actions.add(clockStep)
+    actions.add(targetTps)
+    actions.add(setRate)
+    actions.add(paste)
 
     val controls = new JPanel(new BorderLayout(8, 0))
     controls.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6))
     controls.add(selector, BorderLayout.WEST)
     controls.add(status, BorderLayout.CENTER)
-    controls.add(paste, BorderLayout.EAST)
+    controls.add(actions, BorderLayout.EAST)
 
     val scroll = new JScrollPane(screenPanel)
     scroll.getViewport.setBackground(Color.BLACK)
@@ -260,13 +283,23 @@ private final class ViewerWindow(
 
   private def refresh(): Unit = {
     if (!closed.get()) {
-      val id = selectedScreen.get()
-      connection.call("screen.read", ujson.Obj("screenId" -> id)) match {
+      connection.call("simulation.status") match {
         case Left(error) => showError(error.message)
-        case Right(value) =>
-          ViewerProtocol.decodeScreen(value) match {
-            case Left(error)     => showError(error)
-            case Right(snapshot) => renderIfChanged(id, snapshot)
+        case Right(clockValue) =>
+          ViewerProtocol.decodeClock(clockValue) match {
+            case Left(error) => showError(error)
+            case Right(clock) =>
+              val id = selectedScreen.get()
+              connection.call("screen.read", ujson.Obj("screenId" -> id)) match {
+                case Left(error) => showError(error.message)
+                case Right(value) =>
+                  ViewerProtocol.decodeScreen(value) match {
+                    case Left(error) => showError(error)
+                    case Right(snapshot) =>
+                      renderIfChanged(id, snapshot)
+                      showStatus(id, snapshot, clock)
+                  }
+              }
           }
       }
     }
@@ -282,10 +315,6 @@ private final class ViewerWindow(
           SwingUtilities.invokeLater(() => {
             if (!closed.get() && selectedScreen.get() == id) {
               screenPanel.update(snapshot, image)
-              status.setForeground(Color.DARK_GRAY)
-              status.setText(
-                s"$id • ${snapshot.width}×${snapshot.height} • revision ${snapshot.revision}"
-              )
             }
           })
       }
@@ -305,6 +334,51 @@ private final class ViewerWindow(
           showError("viewer input queue is full")
       }
     }
+
+  private def submitClock(method: String, params: ujson.Obj): Unit = {
+    if (!closed.get()) {
+      try {
+        worker.execute(() => {
+          connection.call(method, params) match {
+            case Left(error) => showError(error.message)
+            case Right(_)    => refresh()
+          }
+        })
+      } catch {
+        case _: RejectedExecutionException => showError("viewer input queue is full")
+      }
+    }
+  }
+
+  private def toggleClock(): Unit = {
+    val clock = currentClock.get()
+    val method =
+      if (clock != null && clock.state == "running") "simulation.pause"
+      else "simulation.resume"
+    submitClock(method, ujson.Obj())
+  }
+
+  private def showStatus(
+      id: String,
+      snapshot: ScreenSnapshot,
+      clock: ViewerClockStatus
+  ): Unit = {
+    val previousClock = currentClock.getAndSet(clock)
+    SwingUtilities.invokeLater(() => {
+      if (!closed.get() && selectedScreen.get() == id) {
+        clockToggle.setText(if (clock.state == "running") "Pause" else "Resume")
+        clockStep.setEnabled(clock.state == "paused")
+        if (previousClock == null || previousClock.targetTps != clock.targetTps)
+          targetTps.setValue(Integer.valueOf(clock.targetTps))
+        status.setForeground(Color.DARK_GRAY)
+        status.setText(
+          f"$id • ${snapshot.width}×${snapshot.height} • rev ${snapshot.revision} • " +
+            f"${clock.state} • ${clock.targetTps}%d TPS target • ${clock.measuredTps}%.1f measured • " +
+            s"${clock.overrunCount} overruns"
+        )
+      }
+    })
+  }
 
   private def submitInput(params: ujson.Obj): Unit = {
     if (!closed.get()) {

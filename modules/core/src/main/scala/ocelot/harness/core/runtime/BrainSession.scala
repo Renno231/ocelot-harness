@@ -52,6 +52,13 @@ private[runtime] final class BrainSession(
   private val eventBuffer =
     project.map(value => new SessionEventBuffer(value.runtime.limits.eventBufferSize))
   private var lastRunResult: Option[RunResult] = None
+  private val simulationClock = new SimulationClock(
+    project.map(_.id.value).getOrElse("lifecycle-test"),
+    project.map(_.runtime.tickRate).getOrElse(20),
+    project.exists(value => value.schemaVersion == 2 && value.runtime.clockAutoStart),
+    operation => lane.execute(operation()),
+    () => workspace.update()
+  )
 
   def isClosed: Boolean = closed.get()
 
@@ -70,28 +77,52 @@ private[runtime] final class BrainSession(
   }
 
   override def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus] = command {
-    machine(id).flatMap { computer =>
-      computer.machine.stop()
-      settleStoppedMachine(computer).map(_ => machineStatus(id, computer))
+    withManualTickBarrier {
+      machine(id).flatMap { computer =>
+        computer.machine.stop()
+        settleStoppedMachine(computer).map(_ => machineStatus(id, computer))
+      }
     }
   }
 
   override def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus] = command {
-    machine(id).flatMap { computer =>
-      computer.machine.stop()
-      settleStoppedMachine(computer).map { _ =>
-        computer.machine.start()
-        machineStatus(id, computer)
+    withManualTickBarrier {
+      machine(id).flatMap { computer =>
+        computer.machine.stop()
+        settleStoppedMachine(computer).map { _ =>
+          computer.machine.start()
+          machineStatus(id, computer)
+        }
       }
     }
   }
 
   override def run(request: RunRequest): Either[HarnessError, RunResult] = command {
-    validateRunRequest(request).flatMap(runValidated).map { result =>
-      lastRunResult = Some(result)
-      result
+    withManualTickBarrier {
+      validateRunRequest(request).flatMap(runValidated).map { result =>
+        lastRunResult = Some(result)
+        result
+      }
     }
   }
+
+  override def startClock(tps: Option[Int]): Either[HarnessError, SimulationClockStatus] =
+    command(simulationClock.start(tps))
+
+  override def pauseClock(): Either[HarnessError, SimulationClockStatus] =
+    command(Right(simulationClock.pause()))
+
+  override def resumeClock(): Either[HarnessError, SimulationClockStatus] =
+    command(Right(simulationClock.resume()))
+
+  override def stepClock(count: Int): Either[HarnessError, SimulationClockStatus] =
+    command(simulationClock.step(count))
+
+  override def setClockRate(tps: Int): Either[HarnessError, SimulationClockStatus] =
+    command(simulationClock.setRate(tps))
+
+  override def clockStatus(): Either[HarnessError, SimulationClockStatus] =
+    command(Right(simulationClock.status()))
 
   override def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot] = command {
     screen(id).map(screenCapture.capture(id, _))
@@ -112,17 +143,19 @@ private[runtime] final class BrainSession(
       id: ScreenId,
       input: UserInput
   ): Either[HarnessError, InputResult] = command {
-    screen(id).flatMap { value =>
-      constructed.flatMap(_.screenTiers.get(id)) match {
-        case Some(screenTier) =>
-          inputController.send(
-            value,
-            constructed.flatMap(_.keyboards.get(id)),
-            screenTier,
-            input,
-            () => workspace.update()
-          )
-        case None => Left(UnknownScreen(id.value))
+    withManualTickBarrier {
+      screen(id).flatMap { value =>
+        constructed.flatMap(_.screenTiers.get(id)) match {
+          case Some(screenTier) =>
+            inputController.send(
+              value,
+              constructed.flatMap(_.keyboards.get(id)),
+              screenTier,
+              input,
+              () => advanceWorkspaceTick()
+            )
+          case None => Left(UnknownScreen(id.value))
+        }
       }
     }
   }
@@ -133,42 +166,46 @@ private[runtime] final class BrainSession(
 
   override def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription] =
     command {
-      for {
-        value <- project.toRight(SnapshotInvalid("snapshot storage is unavailable"))
-        topology <- constructed.toRight(SnapshotInvalid("snapshot topology is unavailable"))
-        description <- SnapshotStore.save(value, topology, workspace, brainVersion, request)
-      } yield description
+      withManualTickBarrier {
+        for {
+          value <- project.toRight(SnapshotInvalid("snapshot storage is unavailable"))
+          topology <- constructed.toRight(SnapshotInvalid("snapshot topology is unavailable"))
+          description <- SnapshotStore.save(value, topology, workspace, brainVersion, request)
+        } yield description
+      }
     }
 
   override def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription] =
     command {
-      project.toRight(SnapshotInvalid("snapshot storage is unavailable")).flatMap { value =>
-        SnapshotStore.load(value, brainVersion, name).flatMap { loaded =>
-          val candidate = new Workspace(value.paths.projectRoot)
-          try {
-            candidate.load(loaded.nbt)
-            if (candidate.getIngameTime.toLong != loaded.description.captureTick) {
-              disposeWorkspace(candidate)
-              Left(SnapshotCorrupt("workspace tick does not match snapshot metadata"))
-            } else {
-              val candidateTopology = workspaceSource
-                .toRight(SnapshotInvalid("snapshot workspace source is unavailable"))
-                .map(_.restore(candidate, loaded.identity))
-                .fold(error => throw new IllegalArgumentException(error.message), identity)
-              val revisionBase =
-                screenSnapshots().valuesIterator.map(_.revision).foldLeft(0L)(math.max)
-              val previous = workspace
-              workspace = candidate
-              constructed = Some(candidateTopology)
-              screenCapture = new ScreenCapture(candidate, revisionBase)
-              lastRunResult = None
-              disposeWorkspace(previous)
-              Right(candidateTopology.description)
+      withManualTickBarrier {
+        project.toRight(SnapshotInvalid("snapshot storage is unavailable")).flatMap { value =>
+          SnapshotStore.load(value, brainVersion, name).flatMap { loaded =>
+            val candidate = new Workspace(value.paths.projectRoot)
+            try {
+              candidate.load(loaded.nbt)
+              if (candidate.getIngameTime.toLong != loaded.description.captureTick) {
+                disposeWorkspace(candidate)
+                Left(SnapshotCorrupt("workspace tick does not match snapshot metadata"))
+              } else {
+                val candidateTopology = workspaceSource
+                  .toRight(SnapshotInvalid("snapshot workspace source is unavailable"))
+                  .map(_.restore(candidate, loaded.identity))
+                  .fold(error => throw new IllegalArgumentException(error.message), identity)
+                val revisionBase =
+                  screenSnapshots().valuesIterator.map(_.revision).foldLeft(0L)(math.max)
+                val previous = workspace
+                workspace = candidate
+                constructed = Some(candidateTopology)
+                screenCapture = new ScreenCapture(candidate, revisionBase)
+                lastRunResult = None
+                disposeWorkspace(previous)
+                Right(candidateTopology.description)
+              }
+            } catch {
+              case NonFatal(error) =>
+                disposeWorkspace(candidate)
+                Left(SnapshotCorrupt(errorMessage(error)))
             }
-          } catch {
-            case NonFatal(error) =>
-              disposeWorkspace(candidate)
-              Left(SnapshotCorrupt(errorMessage(error)))
           }
         }
       }
@@ -187,6 +224,7 @@ private[runtime] final class BrainSession(
           eventBuffer.map(_.snapshot()).getOrElse(EventSnapshot(Vector.empty, 0L)),
           screenSnapshots(),
           lastRunResult,
+          simulationClock.status(),
           request,
           store
         )
@@ -199,16 +237,20 @@ private[runtime] final class BrainSession(
     lifecycleLock.synchronized {
       if (closed.compareAndSet(false, true)) {
         closedNow = true
+        try simulationClock.close()
+        catch { case NonFatal(error) => failure = Some(error) }
         try {
           lane.execute {
             eventBuffer.foreach(_.close())
             disposeWorkspace(workspace)
           } match {
-            case Left(error) => failure = Some(new IllegalStateException(error.message))
-            case Right(_)    =>
+            case Left(error) if failure.isEmpty =>
+              failure = Some(new IllegalStateException(error.message))
+            case _ =>
           }
         } catch {
-          case NonFatal(error) => failure = Some(error)
+          case NonFatal(error) if failure.isEmpty => failure = Some(error)
+          case NonFatal(_)                        =>
         } finally lane.close()
       }
     }
@@ -257,6 +299,15 @@ private[runtime] final class BrainSession(
       else lane.execute(operation).flatMap(identity)
     }
 
+  private def withManualTickBarrier[A](operation: => A): A = {
+    simulationClock.beginManualTicks()
+    try operation
+    finally simulationClock.endManualTicks()
+  }
+
+  private def advanceWorkspaceTick(): Unit =
+    simulationClock.recordManualTick(workspace.update())
+
   private def machine(id: ComputerId): Either[HarnessError, Computer] =
     if (id == null) Left(UnknownComputer("<null>"))
     else
@@ -291,7 +342,7 @@ private[runtime] final class BrainSession(
     if (computer.machine.isExecuting) {
       Left(SessionOperationFailed("machine worker did not stop within 2 seconds"))
     } else {
-      workspace.update()
+      advanceWorkspaceTick()
       Right(())
     }
   }
@@ -364,7 +415,7 @@ private[runtime] final class BrainSession(
       } else if (System.nanoTime() - startedAt >= wallBudgetNanos) {
         result = Some(Right(RunStopReason.ConditionTimedOut("max_wall_time")))
       } else {
-        workspace.update()
+        advanceWorkspaceTick()
         ticks += 1
         pace(request.pace, request.cancellation, startedAt, request.maxWallTime)
         recordObservation()

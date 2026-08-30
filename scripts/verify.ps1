@@ -59,10 +59,12 @@ try {
         $cliHelp -notmatch 'project init' -or
         $cliHelp -notmatch 'project inspect-desktop' -or
         $cliHelp -notmatch 'project import-desktop' -or
-        $cliHelp -notmatch 'project validate') {
-        throw 'Packaged local project commands are unavailable'
+        $cliHelp -notmatch 'project validate' -or
+        $cliHelp -notmatch 'simulation start' -or
+        $cliHelp -notmatch 'simulation status') {
+        throw 'Packaged project or clock commands are unavailable'
     }
-    Write-Host 'PASS: packaged local project commands'
+    Write-Host 'PASS: packaged project and clock commands'
 
     $smokeDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "ocelot-harness-smoke-$PID-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $smokeDirectory | Out-Null

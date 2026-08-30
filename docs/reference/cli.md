@@ -22,6 +22,12 @@ ocelotctl version
 ocelotctl workspace describe
 ocelotctl machine <start|stop|reset> <computer-id>
 ocelotctl simulation run --screen <id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
+ocelotctl simulation start [--tps <1..1000>]
+ocelotctl simulation pause
+ocelotctl simulation resume
+ocelotctl simulation step [count]
+ocelotctl simulation rate <1..1000>
+ocelotctl simulation status
 ocelotctl screen read <screen-id>
 ocelotctl screen wait <screen-id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
 ocelotctl screen touch <screen-id> <x> <y> [--button <n>]
@@ -48,4 +54,4 @@ ocelot-harnessd force-stop --project <path>
 ocelot-harnessd serve <--stdio|--loopback> --project <path>
 ```
 
-Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.

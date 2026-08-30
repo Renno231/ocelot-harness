@@ -12,12 +12,13 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 ### Project contract
 
 - Use `ocelot-harness.conf` as the canonical HOCON project manifest.
-- Require `schemaVersion = 1`.
+- Preserve `schemaVersion = 1` compatibility and use `schemaVersion = 2` for deterministic expanded topology, Desktop sources, and continuous-clock settings.
 - Address resources through typed logical IDs, not generated OC addresses or brain class names.
 - Resolve relative paths from the project root.
 - Constrain read-write host paths to the project root unless service policy explicitly grants another canonical root.
 - Keep runtime state, artifacts, connection metadata, and snapshots beneath `.ocelot-harness/`.
-- Keep Ocelot workspace NBT as a runtime snapshot format rather than desired configuration.
+- Keep Ocelot workspace NBT as a runtime snapshot format; compatible Desktop `back` graphs may also be imported through the bounded schema-v2 source adapter.
+- Schema-v2 projects default to one daemon-owned auto-started 20 TPS clock; schema-v1 projects remain non-continuous.
 
 ### Control contract
 
@@ -26,13 +27,14 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 - Support newline-delimited JSON-RPC over stdio for an owning agent/test process.
 - Support authenticated loopback transport for persistent service access by separate CLI and viewer processes.
 - Return artifact paths and SHA-256 metadata instead of embedding large binary payloads in JSON.
+- Expose additive simulation start/pause/resume/step/rate/status methods while retaining bounded condition runs.
 
 ## Consequences
 
 - Project topology can be reviewed and version-controlled.
 - Random runtime addresses do not destabilize scripts or tests.
 - Pi tooling and the general CLI use one command contract.
-- The service can remain alive between shell commands and while a user observes the same session through the viewer.
+- The service can remain alive and advance continuously between shell commands while users observe and control the same session through one or more viewers.
 - Loopback lifecycle metadata and authentication require dedicated security and stale-process tests.
 - Schema and protocol changes require compatibility policy and contract tests.
 
@@ -46,6 +48,6 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 
 ## Verification
 
-Project construction parses schema version 1 into immutable typed models before creating brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, Internet double opt-in, tier-1 through tier-3 legality, and service-owned topology caps. Forked real-brain tests construct and operate independent tier-2/tier-3 computers and screens without exposing brain types or slot indexes; the pure profile contract also covers tier 1.
+Project construction parses schema versions 1 and 2 into immutable typed models before creating or importing brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, Internet double opt-in, expanded device legality, Desktop graph preservation, and service-owned topology caps.
 
-Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent access, concurrent one-shot CLI calls beside a persistent viewer connection, bounded shutdown, and path handling with spaces.
+Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent access, continuous clock controls and lossless counters, concurrent CLI calls beside persistent viewer connections, bounded shutdown, and path handling with spaces.

@@ -20,6 +20,21 @@ final case class MachineStatus(
     lastError: Option[String]
 )
 
+sealed trait SimulationClockState extends Product with Serializable { def name: String }
+object SimulationClockState {
+  case object Paused extends SimulationClockState { override val name: String = "paused" }
+  case object Running extends SimulationClockState { override val name: String = "running" }
+}
+
+final case class SimulationClockStatus(
+    state: SimulationClockState,
+    targetTps: Int,
+    measuredTps: Double,
+    totalTicks: Long,
+    overrunCount: Long,
+    lastTickDurationNanos: Long
+)
+
 sealed trait TickPace extends Product with Serializable
 object TickPace {
   case object Accelerated extends TickPace

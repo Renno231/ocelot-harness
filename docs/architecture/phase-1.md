@@ -29,6 +29,7 @@ Phase 1 includes:
 - multiple computers, screens, keyboards, filesystems, and network connections
 - host-directory-backed managed disks
 - machine lifecycle control
+- one daemon-owned continuous simulation clock with 1–1000 TPS control
 - serialized tick advancement with tick and wall-clock budgets
 - screen text, cell/color, and PNG observations
 - keyboard, clipboard, touch, drag, drop, and scroll input
@@ -186,6 +187,12 @@ trait HarnessSession extends AutoCloseable {
   def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def run(request: RunRequest): Either[HarnessError, RunResult]
+  def startClock(tps: Option[Int]): Either[HarnessError, SimulationClockStatus]
+  def pauseClock(): Either[HarnessError, SimulationClockStatus]
+  def resumeClock(): Either[HarnessError, SimulationClockStatus]
+  def stepClock(count: Int): Either[HarnessError, SimulationClockStatus]
+  def setClockRate(tps: Int): Either[HarnessError, SimulationClockStatus]
+  def clockStatus(): Either[HarnessError, SimulationClockStatus]
   def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
   def send(id: ScreenId, input: UserInput): Either[HarnessError, InputResult]
   def recentEvents(): Either[HarnessError, EventSnapshot]
@@ -200,6 +207,7 @@ The actual class is concrete and package-private where possible. Public models d
 **Owned invariants:**
 
 - all mutations and tick calls are linearized through one session executor
+- one private clock owner is the only continuous tick producer
 - logical IDs resolve to the expected entity kind
 - brain entities cannot escape after session close
 - screen reads are immutable synchronized copies
@@ -213,6 +221,14 @@ The actual class is concrete and package-private where possible. Public models d
 The catalog owns case-tier slot counts, accepted component kinds, component-tier limits, required hardware, connection rules, and the mapping to brain inventory indexes. Manifest callers select semantic roles such as `cpu`, `memory`, `gpu`, `disk`, and `card`; they never select raw brain slot integers.
 
 Schema v1 retains the accepted tier-1, tier-2, and tier-3 computer/screen profiles. Schema v2 extends the same private catalog to cases, screens/keyboards, racks/servers, disk drives/floppies, RAID, holograms, note blocks, microcontrollers, relays, and cables. Semantic inventories cover legal CPU/APU, memory, GPU, EEPROM, component bus, managed/unmanaged media, and supported network, wireless, linked, data, redstone, and Internet cards. Typed `device:port` edges validate rack mounts, cardinal sides, multiplicity, tiers, slots, and service caps before construction. Internet cards still require service and manifest double opt-in. Harness snapshots bind the constructed graph through private entity identities while public descriptions remain logical and brain-free.
+
+### SimulationClock
+
+**Purpose:** Keep schema-v2 workspaces advancing continuously while preserving one serialized tick owner.
+
+The clock schedules from monotonic target deadlines at 1–1000 TPS. It submits one tick through the session lane, records achieved TPS and tick duration, and skips deadlines missed under host load instead of building a catch-up queue. Public state contains only `paused|running`, target/measured TPS, monotonic total ticks, cumulative overruns, and the last tick duration.
+
+Schema-v2 projects default to `20 TPS` with `runtime.clock.autoStart = true`; schema-v1 projects retain non-continuous behavior. Pause is a lane barrier, step advances an exact bounded count only while paused, and rate changes reset the next deadline. Bounded runs and tick-advancing input temporarily own the same lane and reset the continuous deadline afterward. Save, restore, workspace replacement, and close cannot race a clock tick. Viewer polling never advances time.
 
 ### SimulationController
 

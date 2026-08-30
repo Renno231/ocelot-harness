@@ -155,6 +155,38 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
     frames.lastOption.map(line => ujson.read(line)("id").num.toInt) shouldBe Some(2)
   }
 
+  test("clock methods expose bounded controls and lossless counters") {
+    val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
+    response(
+      endpoint.handleLine(request(1, "harness.version", ujson.Obj("protocolMajor" -> 1)))
+    )
+
+    val started = response(
+      endpoint.handleLine(request(2, "simulation.start", ujson.Obj("tps" -> 100)))
+    )("result")
+    started("state").str shouldBe "running"
+    started("targetTps").num.toInt shouldBe 100
+    started("totalTicks").str shouldBe "9007199254740993"
+
+    response(endpoint.handleLine(request(3, "simulation.pause")))("result")("state").str shouldBe
+      "paused"
+    val stepped = response(
+      endpoint.handleLine(request(4, "simulation.step", ujson.Obj("count" -> 3)))
+    )("result")
+    stepped("totalTicks").str shouldBe "9007199254740996"
+    response(endpoint.handleLine(request(5, "simulation.resume")))("result")("state").str shouldBe
+      "running"
+    response(endpoint.handleLine(request(6, "simulation.rate", ujson.Obj("tps" -> 20))))(
+      "result"
+    )("targetTps").num.toInt shouldBe 20
+    response(endpoint.handleLine(request(7, "simulation.status")))("result")("state").str shouldBe
+      "running"
+
+    response(
+      endpoint.handleLine(request(8, "simulation.start", ujson.Obj("tps" -> 1001)))
+    )("error")("code").num.toInt shouldBe -32602
+  }
+
   test("protocol execution limits reject effectively unbounded runs") {
     val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
     response(
@@ -197,6 +229,14 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
   private final class StubSession extends HarnessSession {
     private val projectId = ProjectId.parse("fixture").toOption.get
     private val computerId = ComputerId.parse("main").toOption.get
+    private var clock = SimulationClockStatus(
+      SimulationClockState.Paused,
+      20,
+      0.0,
+      9007199254740993L,
+      0L,
+      0L
+    )
     override def describe(): WorkspaceDescription =
       WorkspaceDescription(projectId, Vector.empty, Vector.empty, Vector.empty)
 
@@ -221,6 +261,34 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
           EventSnapshot(Vector.empty, 0L)
         )
       )
+
+    override def startClock(tps: Option[Int]): Either[HarnessError, SimulationClockStatus] = {
+      clock = clock.copy(
+        state = SimulationClockState.Running,
+        targetTps = tps.getOrElse(clock.targetTps)
+      )
+      Right(clock)
+    }
+
+    override def pauseClock(): Either[HarnessError, SimulationClockStatus] = {
+      clock = clock.copy(state = SimulationClockState.Paused)
+      Right(clock)
+    }
+
+    override def resumeClock(): Either[HarnessError, SimulationClockStatus] =
+      startClock(None)
+
+    override def stepClock(count: Int): Either[HarnessError, SimulationClockStatus] = {
+      clock = clock.copy(totalTicks = clock.totalTicks + count)
+      Right(clock)
+    }
+
+    override def setClockRate(tps: Int): Either[HarnessError, SimulationClockStatus] = {
+      clock = clock.copy(targetTps = tps)
+      Right(clock)
+    }
+
+    override def clockStatus(): Either[HarnessError, SimulationClockStatus] = Right(clock)
 
     override def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot] =
       Right(

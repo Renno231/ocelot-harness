@@ -55,6 +55,7 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 - The graphical viewer is a separate authenticated loopback client; it does not run inside the daemon.
 - Only the selected screen is polled, and only immutable protocol snapshots are rendered.
 - Host clipboard content is read only after the user presses **Paste clipboard** and is then handled by the existing bounded paste-input contract.
+- Clock buttons call the same authenticated, bounded simulation protocol as the CLI; viewer polling never advances simulation time.
 - Closing the window closes its client connection and bounded worker without stopping or taking ownership of the daemon.
 
 ### Resource limits
@@ -62,6 +63,8 @@ The service is a local development tool, not a network sandbox or multi-tenant b
 Every run condition has both a maximum simulated tick count and wall-clock deadline. The harness also bounds:
 
 - service and viewer command queues
+- target TPS (1–1000), manual steps (1–10000), and rolling clock measurements
+- missed tick deadlines are skipped instead of queued as catch-up work
 - event retention
 - device, inventory-item, connection, computer, screen, and managed-media counts
 - capture frequency

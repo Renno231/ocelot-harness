@@ -77,6 +77,27 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
     ) shouldBe AppExitCode.Usage
   }
 
+  test("simulation clock commands enforce bounded CLI contracts before connecting") {
+    val project = Files.createTempDirectory("ocelot-harness-clock-cli-")
+    try {
+      val prefix = Array("--project", project.toString)
+      Vector(
+        Array("simulation", "start"),
+        Array("simulation", "start", "--tps", "100"),
+        Array("simulation", "pause"),
+        Array("simulation", "resume"),
+        Array("simulation", "step"),
+        Array("simulation", "step", "3"),
+        Array("simulation", "rate", "20"),
+        Array("simulation", "status")
+      ).foreach(command => OcelotCtl.run(prefix ++ command) shouldBe AppExitCode.Connection)
+
+      OcelotCtl.run(Array("simulation", "start", "--tps", "0")) shouldBe AppExitCode.Usage
+      OcelotCtl.run(Array("simulation", "rate", "1001")) shouldBe AppExitCode.Usage
+      OcelotCtl.run(Array("simulation", "step", "10001")) shouldBe AppExitCode.Usage
+    } finally Files.delete(project)
+  }
+
   test("global parsing stops at the command so option-like input remains data") {
     val project = Files.createTempDirectory("ocelot-harness-cli-parse-")
     try {
@@ -145,7 +166,10 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
               )
             )
             validateExit shouldBe AppExitCode.Success
-            ujson.read(validateOut)("schemaVersion").num shouldBe 2
+            val validation = ujson.read(validateOut)
+            validation("schemaVersion").num shouldBe 2
+            validation("tickRate").num shouldBe 20
+            validation("clockAutoStart").bool shouldBe true
           }
       }
     } finally {

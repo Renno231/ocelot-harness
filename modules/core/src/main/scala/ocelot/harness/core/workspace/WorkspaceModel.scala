@@ -95,6 +95,12 @@ trait HarnessSession extends AutoCloseable {
   def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def run(request: RunRequest): Either[HarnessError, RunResult]
+  def startClock(tps: Option[Int] = None): Either[HarnessError, SimulationClockStatus]
+  def pauseClock(): Either[HarnessError, SimulationClockStatus]
+  def resumeClock(): Either[HarnessError, SimulationClockStatus]
+  def stepClock(count: Int): Either[HarnessError, SimulationClockStatus]
+  def setClockRate(tps: Int): Either[HarnessError, SimulationClockStatus]
+  def clockStatus(): Either[HarnessError, SimulationClockStatus]
   def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
   def captureScreen(
       id: ScreenId,

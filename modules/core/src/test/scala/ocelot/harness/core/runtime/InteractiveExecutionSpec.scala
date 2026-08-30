@@ -427,6 +427,12 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
         projectRoot.resolve("artifacts").resolve("diagnostics").resolve("interactive.zip")
       )
       val diagnosticEntries = readZip(diagnosticBytes)
+      val diagnosticRuntime = new String(
+        diagnosticEntries("runtime.txt"),
+        StandardCharsets.UTF_8
+      )
+      diagnosticRuntime should include("clockState=paused")
+      diagnosticRuntime should include("clockTargetTps=20")
       val diagnosticManifest = new String(
         diagnosticEntries("manifest.conf"),
         StandardCharsets.UTF_8

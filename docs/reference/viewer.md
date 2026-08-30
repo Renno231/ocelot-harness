@@ -23,6 +23,8 @@ Start a persistent project session and launch the viewer:
 
 ```text
 scripts\ocelot-harnessd.cmd up --project examples/two-computers
+scripts\ocelotctl.cmd --project examples/two-computers machine start alpha
+scripts\ocelotctl.cmd --project examples/two-computers simulation start --tps 20
 scripts\ocelot-viewer.cmd --project examples/two-computers --screen alpha
 ```
 
@@ -32,7 +34,7 @@ POSIX uses the equivalent launcher:
 scripts/ocelot-viewer --project examples/two-computers --screen alpha
 ```
 
-The daemon must already be running. Closing the window closes only its authenticated client connection; it does not stop the daemon. Stop the project separately:
+The checked example is schema v1, so the explicit `simulation start` command enables its continuous clock. Newly initialized schema-v2 projects auto-start at their configured target TPS. The daemon must already be running. Closing the window closes only its authenticated client connection; it does not stop the daemon. Stop the project separately:
 
 ```text
 scripts\ocelot-harnessd.cmd down --project examples/two-computers
@@ -64,7 +66,12 @@ Only the selected screen is polled. A persistent authenticated connection is reu
 | Shift and Control | Modifier key down/up |
 | **Paste clipboard** button | Explicit host clipboard paste |
 | Screen selector | Switch the observed logical screen |
+| **Pause/Resume** | Stop or continue the daemon-owned simulation clock |
+| **Step** | Advance exactly one tick while paused |
+| TPS spinner + **Set TPS** | Change the target rate within 1–1000 TPS |
 
-Mouse coordinates are mapped to one-based emulated cells. Tier-1 screens reject touch operations as required by OpenComputers behavior. Input and polling share one bounded background lane; Swing updates occur only on the event-dispatch thread.
+The status line reports clock state, target TPS, bounded rolling measured TPS, and cumulative overruns alongside the selected screen revision. Measured TPS describes achieved host performance rather than a real-time guarantee.
 
-The viewer observes and injects input but does not take simulation ownership. Agents and CLI clients can continue issuing bounded machine and simulation commands while a user watches the same screens.
+Mouse coordinates are mapped to one-based emulated cells. Tier-1 screens reject touch operations as required by OpenComputers behavior. Input, clock control, and polling share one bounded background lane; Swing updates occur only on the event-dispatch thread.
+
+The daemon clock—not viewer polling—owns simulation time. Agents and CLI clients can continue issuing bounded machine, simulation, snapshot, and input commands while one or more users watch the same session.

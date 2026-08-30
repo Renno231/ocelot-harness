@@ -19,9 +19,12 @@ project { id = "demo" }
 workspace { kind = "manifest" }
 runtime {
   tickRate = 20
+  clock { autoStart = true }
   internet { http = false, tcp = false }
 }
 ```
+
+`tickRate` accepts 1–1000 TPS. Schema-v2 projects default to an auto-started 20 TPS clock; setting `clock.autoStart = false` opens the project paused. Schema-v1 projects retain their original non-continuous behavior. Clock scheduling uses monotonic deadlines, reports measured TPS and overruns, and skips missed deadlines rather than enqueuing catch-up ticks.
 
 `workspace.kind = "desktop"` selects an imported Desktop source instead; one project cannot mix imported and manifest topology.
 

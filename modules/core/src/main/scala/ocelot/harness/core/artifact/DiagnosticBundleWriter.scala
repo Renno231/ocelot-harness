@@ -24,6 +24,7 @@ private[harness] object DiagnosticBundleWriter {
       events: EventSnapshot,
       screens: Map[ocelot.harness.core.project.ScreenId, ScreenSnapshot],
       lastRun: Option[RunResult],
+      clock: SimulationClockStatus,
       request: DiagnosticRequest,
       store: ArtifactStore
   ): Either[HarnessError, DiagnosticBundle] = {
@@ -42,7 +43,7 @@ private[harness] object DiagnosticBundleWriter {
             s"protocol=${BuildIdentity.ProtocolVersion}"
           ).mkString("\n") + "\n"
         )
-        entries += "runtime.txt" -> utf8(runtimeSummary(project))
+        entries += "runtime.txt" -> utf8(runtimeSummary(project, clock))
         entries += "topology.txt" -> utf8(topologySummary(description))
         entries += "events.txt" -> utf8(eventsSummary(project, events))
         entries += "timeline.txt" -> utf8(timelineSummary(lastRun))
@@ -122,10 +123,20 @@ private[harness] object DiagnosticBundleWriter {
       .mkString("\n")
   }
 
-  private def runtimeSummary(project: ValidatedProject): String =
+  private def runtimeSummary(
+      project: ValidatedProject,
+      clock: SimulationClockStatus
+  ): String =
     Vector(
       s"project=${project.id.value}",
       s"tickRate=${project.runtime.tickRate}",
+      s"clockAutoStart=${project.runtime.clockAutoStart}",
+      s"clockState=${clock.state.name}",
+      s"clockTargetTps=${clock.targetTps}",
+      f"clockMeasuredTps=${clock.measuredTps}%.3f",
+      s"clockTotalTicks=${clock.totalTicks}",
+      s"clockOverruns=${clock.overrunCount}",
+      s"clockLastTickDurationNanos=${clock.lastTickDurationNanos}",
       s"internetHttp=${project.runtime.internet.httpEnabled}",
       s"internetTcp=${project.runtime.internet.tcpEnabled}",
       s"defaultMaxTicks=${project.runtime.limits.defaultMaxTicks}",

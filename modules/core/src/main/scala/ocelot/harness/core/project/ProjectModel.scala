@@ -85,7 +85,8 @@ final case class InternetSettings(
 final case class ProjectRuntime(
     tickRate: Int,
     internet: InternetSettings,
-    limits: RuntimeLimits
+    limits: RuntimeLimits,
+    clockAutoStart: Boolean = false
 )
 
 sealed trait WorkspaceSourceDefinition extends Product with Serializable

@@ -50,10 +50,11 @@ Managed disks with custom paths must resolve beneath the Desktop source. Their p
 
 ```text
 scripts\ocelot-harnessd.cmd up --project <project-directory>
+scripts\ocelotctl.cmd --project <project-directory> machine start <computer-id>
 scripts\ocelot-viewer.cmd --project <project-directory> --screen <logical-screen-id>
 ```
 
-Use the ordinary machine, screen, artifact, snapshot, and diagnostic commands with the logical IDs returned by inspection:
+Imported schema-v2 projects auto-start a 20 TPS clock by default; use the ordinary simulation commands or viewer clock controls to pause, step, or change the rate. Use the machine, screen, artifact, snapshot, and diagnostic commands with the logical IDs returned by inspection:
 
 ```text
 scripts\ocelotctl.cmd --project <project-directory> workspace describe

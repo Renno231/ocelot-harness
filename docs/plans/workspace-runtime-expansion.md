@@ -1,6 +1,6 @@
 # Workspace and runtime expansion plan
 
-- **Status:** Active — Stage 1 complete; Stages 2 and 3 approved
+- **Status:** Complete — Stages 1–3 implemented
 - **Baseline:** Ocelot Harness `bf4ec34`, ocelot-brain `bec1cc6`
 - **Compatibility target:** Ocelot Desktop `586d6ef` workspace format using the same brain commit
 - **Execution:** three cohesive stages, each reconciled before one canonical verification and one commit
@@ -254,6 +254,10 @@ ocelotctl project init demo --template mixed-network
 ```
 
 ## Stage 3 — Continuous TPS clock and viewer integration
+
+**Status:** Complete
+
+Delivered one daemon-owned clock on the serialized session lane; schema-v2 auto-start and schema-v1 compatibility; bounded start/pause/resume/step/rate/status controls; monotonic deadline scheduling without catch-up queues; rolling achieved-TPS, duration, total-tick, and overrun measurements; exact snapshot/restore/input/run barriers; diagnostics and lossless protocol reporting; and viewer clock status plus pause/resume/step/rate controls. Forked real-brain and loopback process tests prove continuous execution, exact pause/step behavior, live rate changes, persistent-viewer concurrency, and cleanup.
 
 ### Tests first
 

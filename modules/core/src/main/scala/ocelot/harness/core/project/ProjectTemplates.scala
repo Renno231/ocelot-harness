@@ -171,6 +171,7 @@ object ProjectTemplates {
        |workspace { kind = \"manifest\" }
        |runtime {
        |  tickRate = 20
+       |  clock { autoStart = true }
        |  internet { http = false, tcp = false }
        |}
        |devices {

@@ -7,6 +7,15 @@ import ocelot.harness.core.workspace.{ScreenCell, ScreenSnapshot}
 
 private[app] final case class ViewerCell(x: Int, y: Int)
 
+private[app] final case class ViewerClockStatus(
+    state: String,
+    targetTps: Int,
+    measuredTps: Double,
+    totalTicks: Long,
+    overrunCount: Long,
+    lastTickDurationNanos: Long
+)
+
 private[app] final case class ViewerGeometry(
     screenWidth: Int,
     screenHeight: Int,
@@ -43,6 +52,34 @@ private[app] object ViewerProtocol {
         if (ids.map(_.value).distinct.size == ids.size) Right(())
         else Left("workspace contains duplicate screen IDs")
     } yield ids
+
+  def decodeClock(value: ujson.Value): Either[String, ViewerClockStatus] =
+    try {
+      for {
+        root <- asObject(value, "clock status")
+        state <- string(root, "state")
+        _ <-
+          if (state == "paused" || state == "running") Right(())
+          else Left("clock state must be paused or running")
+        targetTps <- boundedInt(root, "targetTps", 1, 1000)
+        measuredTps <- finiteDouble(root, "measuredTps")
+        _ <-
+          if (measuredTps >= 0.0) Right(())
+          else Left("measuredTps must not be negative")
+        totalTicks <- nonNegativeInt64(root, "totalTicks")
+        overrunCount <- nonNegativeInt64(root, "overrunCount")
+        lastTickDurationNanos <- nonNegativeInt64(root, "lastTickDurationNanos")
+      } yield ViewerClockStatus(
+        state,
+        targetTps,
+        measuredTps,
+        totalTicks,
+        overrunCount,
+        lastTickDurationNanos
+      )
+    } catch {
+      case NonFatal(error) => Left(s"invalid clock response: ${message(error)}")
+    }
 
   def decodeScreen(value: ujson.Value): Either[String, ScreenSnapshot] =
     try {
@@ -233,6 +270,12 @@ private[app] object ViewerProtocol {
       case _                        => Left(s"$field must be a boolean")
     }
 
+  private def finiteDouble(value: ujson.Obj, field: String): Either[String, Double] =
+    value.value.get(field) match {
+      case Some(ujson.Num(result)) if !result.isNaN && !result.isInfinite => Right(result)
+      case _ => Left(s"$field must be a finite number")
+    }
+
   private def int(value: ujson.Obj, field: String): Either[String, Int] =
     value.value.get(field) match {
       case Some(ujson.Num(result)) if result.isValidInt && result == result.toInt.toDouble =>
@@ -275,6 +318,11 @@ private[app] object ViewerProtocol {
         }
       case _ => Left(s"$field must be a decimal int64 string")
     }
+
+  private def nonNegativeInt64(value: ujson.Obj, field: String): Either[String, Long] =
+    int64(value, field).flatMap(result =>
+      if (result >= 0L) Right(result) else Left(s"$field must not be negative")
+    )
 
   private def message(error: Throwable): String =
     Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)

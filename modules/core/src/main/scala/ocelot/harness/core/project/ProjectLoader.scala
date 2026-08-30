@@ -225,7 +225,11 @@ object ProjectLoader {
       rejectUnknown("", rootKeys)
       rejectUnknown("project", Set("id", "artifactDirectory", "snapshotDirectory"))
       if (version == 2) rejectUnknown("workspace", Set("kind", "directory"))
-      rejectUnknown("runtime", Set("tickRate", "internet", "limits"))
+      rejectUnknown(
+        "runtime",
+        Set("tickRate", "internet", "limits") ++ (if (version == 2) Set("clock") else Set.empty)
+      )
+      if (version == 2) rejectUnknown("runtime.clock", Set("autoStart"))
       rejectUnknown("runtime.internet", Set("http", "tcp"))
       rejectUnknown(
         "runtime.limits",
@@ -329,7 +333,11 @@ object ProjectLoader {
 
     private def readRuntime(): ProjectRuntime = {
       val tickRate = optionalInt("runtime.tickRate", 20)
-      if (tickRate <= 0) invalid("runtime.tickRate", "must be positive")
+      if (tickRate < 1 || tickRate > 1000)
+        invalid("runtime.tickRate", "must be between 1 and 1000")
+      val clockAutoStart =
+        if (version == 2) optionalBoolean("runtime.clock.autoStart", default = true)
+        else false
 
       val requestedHttp = optionalBoolean("runtime.internet.http", default = false)
       val requestedTcp = optionalBoolean("runtime.internet.tcp", default = false)
@@ -351,7 +359,8 @@ object ProjectLoader {
           requestedHttp && policy.allowInternetHttp,
           requestedTcp && policy.allowInternetTcp
         ),
-        RuntimeLimits(maxTicks, maxWallTime, eventBufferSize)
+        RuntimeLimits(maxTicks, maxWallTime, eventBufferSize),
+        clockAutoStart
       )
     }
 

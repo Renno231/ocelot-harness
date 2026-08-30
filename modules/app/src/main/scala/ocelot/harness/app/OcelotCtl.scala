@@ -97,9 +97,14 @@ object OcelotCtl {
             "projectId" -> project.id.value,
             "workspaceKind" -> kind,
             "computers" -> computerCount,
-            "screens" -> screenCount
+            "screens" -> screenCount,
+            "tickRate" -> project.runtime.tickRate,
+            "clockAutoStart" -> project.runtime.clockAutoStart
           )
-          json -> s"${project.id.value}: valid schema ${project.schemaVersion} $kind project"
+          json -> (
+            s"${project.id.value}: valid schema ${project.schemaVersion} $kind project, " +
+              s"${project.runtime.tickRate} TPS, clock auto-start ${project.runtime.clockAutoStart}"
+          )
         }
       case _ => return fail(AppExitCode.Usage, usage)
     }
@@ -202,6 +207,23 @@ object OcelotCtl {
         Right(CliRequest("screen.read", ujson.Obj("screenId" -> id), value => value("text").str))
       case Vector("screen", "wait", id, tail @ _*) => waitRequest(id, tail.toVector)
       case Vector("simulation", "run", tail @ _*)  => simulationRequest(tail.toVector)
+      case Vector("simulation", "start") =>
+        Right(clockRequest("simulation.start", ujson.Obj()))
+      case Vector("simulation", "start", "--tps", value) =>
+        clockTps(value).map(tps => clockRequest("simulation.start", ujson.Obj("tps" -> tps)))
+      case Vector("simulation", "pause") =>
+        Right(clockRequest("simulation.pause", ujson.Obj()))
+      case Vector("simulation", "resume") =>
+        Right(clockRequest("simulation.resume", ujson.Obj()))
+      case Vector("simulation", "step") =>
+        Right(clockRequest("simulation.step", ujson.Obj("count" -> 1)))
+      case Vector("simulation", "step", value) =>
+        boundedInteger(value, "step count", 1, 10000)
+          .map(count => clockRequest("simulation.step", ujson.Obj("count" -> count)))
+      case Vector("simulation", "rate", value) =>
+        clockTps(value).map(tps => clockRequest("simulation.rate", ujson.Obj("tps" -> tps)))
+      case Vector("simulation", "status") =>
+        Right(clockRequest("simulation.status", ujson.Obj()))
       case Vector("screen", "touch", id, x, y, tail @ _*) =>
         coordinateInput(id, "touch", x, y, tail.toVector)
       case Vector("screen", "drop", id, x, y, tail @ _*) =>
@@ -311,6 +333,23 @@ object OcelotCtl {
       ),
       value => s"${value("stopReason")("type").str} after ${value("elapsedTicks").num.toInt} ticks"
     )
+
+  private def clockRequest(method: String, params: ujson.Obj): CliRequest =
+    CliRequest(method, params, clockHuman)
+
+  private def clockTps(value: String): Either[String, Int] =
+    boundedInteger(value, "TPS", 1, 1000)
+
+  private def boundedInteger(
+      value: String,
+      name: String,
+      minimum: Int,
+      maximum: Int
+  ): Either[String, Int] =
+    integer(value, name).flatMap { parsed =>
+      if (parsed >= minimum && parsed <= maximum) Right(parsed)
+      else Left(s"$name must be between $minimum and $maximum")
+    }
 
   private def coordinateInput(
       id: String,
@@ -435,6 +474,11 @@ object OcelotCtl {
   private def artifactHuman(value: ujson.Value): String =
     s"${value("relativePath").str} (${value("sha256").str})"
 
+  private def clockHuman(value: ujson.Value): String =
+    f"${value("state").str} at ${value("targetTps").num.toInt}%d TPS " +
+      f"(measured ${value("measuredTps").num}%.2f, ticks ${value("totalTicks").str}, " +
+      s"overruns ${value("overrunCount").str})"
+
   private def fail(code: Int, message: String, harnessCode: Option[String] = None): Int = {
     val suffix = harnessCode.map(value => s" [$value]").getOrElse("")
     System.err.println(s"ERROR$suffix: $message")
@@ -469,6 +513,12 @@ object OcelotCtl {
       |ocelotctl workspace describe
       |ocelotctl machine <start|stop|reset> <computer-id>
       |ocelotctl simulation run --screen <id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
+      |ocelotctl simulation start [--tps <1..1000>]
+      |ocelotctl simulation pause
+      |ocelotctl simulation resume
+      |ocelotctl simulation step [count]
+      |ocelotctl simulation rate <1..1000>
+      |ocelotctl simulation status
       |ocelotctl screen read <screen-id>
       |ocelotctl screen wait <screen-id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
       |ocelotctl screen touch <screen-id> <x> <y> [--button <n>]
@@ -495,7 +545,7 @@ object OcelotCtl {
       |ocelot-harnessd serve <--stdio|--loopback> --project <path>
       |```
       |
-      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
       |""".stripMargin
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])
