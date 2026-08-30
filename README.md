@@ -1,6 +1,6 @@
 # Ocelot Harness
 
-Ocelot Harness is a headless control plane for developing and testing OpenComputers software against the real [ocelot-brain](https://gitlab.com/cc-ru/ocelot/ocelot-brain) runtime—without Minecraft or Ocelot Desktop.
+Ocelot Harness is a development, testing, and automation harness for OpenComputers software powered by the real [ocelot-brain](https://gitlab.com/cc-ru/ocelot/ocelot-brain) runtime. Its daemon runs without Minecraft or Ocelot Desktop, while an optional live viewer lets people watch and control emulated screens.
 
 ```text
 project manifest + host files
@@ -15,11 +15,16 @@ Phase 1 and the workspace/runtime expansion are implemented. The harness provide
 
 Start here:
 
-1. [`docs/ocelot-automation-feasibility.md`](docs/ocelot-automation-feasibility.md)
-2. [`docs/architecture/phase-1.md`](docs/architecture/phase-1.md)
-3. [`docs/plans/phase-1-implementation.md`](docs/plans/phase-1-implementation.md)
-4. [`docs/plans/workspace-runtime-expansion.md`](docs/plans/workspace-runtime-expansion.md)
-5. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+1. [Create a deterministic project](#create-a-deterministic-project)
+2. [Import an Ocelot Desktop workspace](docs/reference/desktop-import.md)
+3. [Use the CLI](docs/reference/cli.md)
+4. [Open the live viewer](docs/reference/viewer.md)
+5. [Define schema-v2 hardware and topology](docs/reference/manifest-v2.md)
+6. [Browse all documentation](docs/README.md)
+7. [Understand the architecture](docs/architecture/phase-1.md)
+8. [Contribute](CONTRIBUTING.md)
+
+The documentation index separates current user guides from historical design and implementation records.
 
 ## Implemented capabilities
 

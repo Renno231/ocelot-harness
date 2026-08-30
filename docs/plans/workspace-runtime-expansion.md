@@ -1,7 +1,9 @@
 # Workspace and runtime expansion plan
 
+> **Completed implementation record:** This document preserves the staged design and acceptance criteria used for workspace import, manifest v2, and continuous simulation. Use the [documentation index](../README.md) for current operation and supported behavior.
+
 - **Status:** Complete — Stages 1–3 implemented
-- **Baseline:** Ocelot Harness `bf4ec34`, ocelot-brain `bec1cc6`
+- **Baseline:** Ocelot Harness 0.1.0 Phase 1, ocelot-brain `bec1cc6`
 - **Compatibility target:** Ocelot Desktop `586d6ef` workspace format using the same brain commit
 - **Execution:** three cohesive stages, each reconciled before one canonical verification and one commit
 

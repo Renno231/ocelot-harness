@@ -1,5 +1,7 @@
 # Ocelot Harness Phase 1 implementation plan
 
+> **Completed implementation record:** This document preserves the acceptance criteria and evidence used to deliver Phase 1. Use the [documentation index](../README.md) for current operation and supported behavior.
+
 - **Status:** Complete — Phase 1 milestones 0 through 5 delivered
 - **Architecture:** [`docs/architecture/phase-1.md`](../architecture/phase-1.md)
 - **Successor:** [`Workspace and runtime expansion`](workspace-runtime-expansion.md)

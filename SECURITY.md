@@ -79,17 +79,19 @@ Ocelot's computer execution timeout remains enabled.
 
 Project manifests are not a secrets store. Diagnostic bundles include a redacted manifest and policy summary. Clients should pass secrets through a future dedicated secret-input mechanism; until that exists, projects requiring secrets are outside the supported threat model.
 
-## Supported reporting
+## Reporting a vulnerability
 
-Until a public repository security contact is selected, report suspected vulnerabilities privately to the repository owner. Include:
+Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/Renno231/ocelot-harness/security/advisories/new). Do not open a public issue for an undisclosed vulnerability.
 
-- affected version/commit
+Include:
+
+- affected version or commit
 - operating system and Java version
 - minimal reproduction
 - host access obtained or data exposed
 - whether untrusted OC code, manifest data, or protocol input is required
 
-Do not attach live tokens, private files, or unredacted diagnostic bundles to a public issue.
+Do not attach live tokens, private files, or unredacted diagnostic bundles to public discussions.
 
 ## Security-sensitive changes
 

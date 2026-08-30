@@ -1,14 +1,14 @@
-# Ocelot Harness Phase 1 architecture
+# Ocelot Harness architecture
 
-- **Status:** Accepted
+- **Status:** Current — Phase 1 plus workspace/runtime expansion
 - **Runtime:** Scala 2.13.10, SBT 1.8.3, Java 8 baseline
 - **Emulator dependency:** ocelot-brain 0.24.2 at commit `bec1cc6b1e9e588692f753e9c617063c74967fed`
 
 ## Purpose
 
-Ocelot Harness provides an external, headless control plane for OpenComputers environments running in ocelot-brain. It lets an agent or test client configure emulated hardware, run computers, inject user input, inspect screens, capture artifacts, and control simulation progress without Minecraft or Ocelot Desktop.
+Ocelot Harness provides a development, testing, and automation control plane for OpenComputers environments running in ocelot-brain. Its daemon operates without Minecraft or Ocelot Desktop; agents and test clients use the CLI or protocol, while people can optionally watch and control emulated screens through a separate live viewer.
 
-Phase 1 owns the complete loop. The approved post-Phase-1 expansion also accepts compatible saved Ocelot Desktop workspaces as bounded project sources while retaining the same runtime/session boundary:
+The system accepts deterministic manifests and compatible saved Ocelot Desktop workspaces as bounded project sources behind one runtime/session boundary:
 
 ```text
 project manifest + host files
@@ -21,7 +21,7 @@ project manifest + host files
 
 ## Scope
 
-Phase 1 includes:
+The current system includes:
 
 - one long-lived Ocelot process with one active project session
 - a versioned, human-editable project manifest
@@ -98,13 +98,10 @@ ocelot-harness/
 ├─ modules/
 │  ├─ core/
 │  │  └─ src/{main,test}/scala/ocelot/harness/core/
-│  │     ├─ runtime/                process/session lifecycle and hardware catalog
-│  │     ├─ project/                manifest, IDs, and path policy
-│  │     ├─ simulation/             ticking and bounded conditions
-│  │     ├─ input/                  user-action translation
-│  │     ├─ screen/                 snapshots and headless rendering
-│  │     ├─ events/                 bounded event collection
-│  │     └─ snapshot/               save/load and metadata
+│  │     ├─ runtime/                lifecycle, construction, ticks, input, and snapshots
+│  │     ├─ project/                manifests, templates, Desktop import, IDs, and paths
+│  │     ├─ workspace/              brain-free session and observation models
+│  │     └─ artifact/               rendering, captures, and diagnostics
 │  └─ app/
 │     └─ src/{main,test}/scala/ocelot/harness/app/
 │        ├─ protocol/               JSON-RPC and loopback ownership
@@ -117,14 +114,14 @@ ocelot-harness/
 └─ scripts/                         reproducible bootstrap/verification
 ```
 
-Only two first-party SBT modules are created initially:
+The repository contains two first-party SBT modules:
 
 | Module | Public purpose | Dependencies |
 |---|---|---|
 | `harness-core` | Typed headless automation API; hides all brain lifecycle and concurrency rules | ocelot-brain |
 | `harness-app` | External protocol, transports, CLI, optional viewer, and process entrypoints | `harness-core` |
 
-Packages organize private implementation responsibilities without creating additional public module interfaces. There is one concrete ocelot-brain implementation in Phase 1. `WorkspaceSourceLoader` is a private source-format boundary: the manifest adapter constructs a brain workspace, while the Desktop adapter loads a compatible saved brain graph. It is not an emulator-backend interface. A generic emulator-backend interface is not introduced until a second real backend exists.
+Packages organize private implementation responsibilities without creating additional public module interfaces. There is one concrete ocelot-brain implementation. `WorkspaceSourceLoader` is a private source-format boundary: the manifest adapter constructs a brain workspace, while the Desktop adapter loads a compatible saved brain graph. It is not an emulator-backend interface. A generic emulator-backend interface becomes justified only when a second real backend has concrete requirements.
 
 ### Compatible Desktop workspace source
 
@@ -194,9 +191,10 @@ trait HarnessSession extends AutoCloseable {
   def setClockRate(tps: Int): Either[HarnessError, SimulationClockStatus]
   def clockStatus(): Either[HarnessError, SimulationClockStatus]
   def readScreen(id: ScreenId): Either[HarnessError, ScreenSnapshot]
+  def captureScreen(id: ScreenId, request: ScreenArtifactRequest): Either[HarnessError, ArtifactDescription]
   def send(id: ScreenId, input: UserInput): Either[HarnessError, InputResult]
   def recentEvents(): Either[HarnessError, EventSnapshot]
-  def saveSnapshot(name: SnapshotName): Either[HarnessError, SnapshotDescription]
+  def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription]
   def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription]
   def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
 }
@@ -247,12 +245,9 @@ RunRequest(
 Stop conditions include:
 
 - screen contains text
-- screen matches a regular expression
-- screen region equals expected cells/colors
+- screen revision advances beyond a known revision
 - machine reaches running, stopped, or crashed state
-- filesystem path exists or has expected content
-- event predicate occurs
-- screen remains unchanged for a tick count
+- an event of the requested kind occurs
 
 Each run returns the stop reason, elapsed ticks, elapsed wall time, final machine states, screen revisions and snapshots, bounded recent events, and a bounded observation timeline. Event and timeline truncation is explicit through drop counts. A timeout is a typed result with diagnostics, not an unbounded sleep or generic exception. Accelerated pacing still yields to brain worker execution; fixed pacing checks cancellation and the wall budget in bounded intervals.
 
@@ -423,7 +418,7 @@ Text observations offer three formats:
 | `cells` | resolution, palette, code points, foreground/background | exact GUI assertions and rendering |
 | `png` | headless raster artifact | visual inspection and image comparison |
 
-Every observation includes a monotonically increasing session-local revision. The revision changes when relevant screen state changes. Clients can request `waitForRevision` rather than poll at an arbitrary frequency.
+Every observation includes a monotonically increasing session-local revision. The revision changes when relevant screen state changes. Bounded runs can wait for a revision greater than a known value, and the viewer polls at a configured bounded interval but rerenders only changed revisions.
 
 ## Service lifecycle and transports
 
@@ -433,7 +428,7 @@ Every observation includes a monotonically increasing session-local revision. Th
 ocelot-harnessd serve --stdio --project <path>
 ```
 
-The owning client starts the process, writes JSON-RPC messages to stdin, reads responses/events from stdout, and terminates the process when finished. Logs go to stderr. This is the simplest and safest integration for a Pi tool or test runner.
+The owning client starts the process, writes JSON-RPC messages to stdin, reads responses/events from stdout, and terminates the process when finished. Logs go to stderr. This is the simplest and safest integration for an agent client or test runner.
 
 ### Standalone loopback mode
 
@@ -459,27 +454,9 @@ Mouse coordinates map to one-based cells. Click, drag, scroll, typed and special
 
 ## Error model
 
-All expected failures are typed:
+All expected failures are typed. Current categories cover runtime ownership and initialization, project validation/opening, closed sessions, unknown computers/screens, invalid run/clock/input/capture requests, unavailable input, session operations, artifact limits/writes, snapshot validation/compatibility/corruption/limits/I/O, and diagnostic generation.
 
-```text
-ManifestInvalid
-UnsupportedSchemaVersion
-InvalidLogicalId
-HardwareProfileViolation
-PathOutsideAllowedRoot
-EntityNotFound
-EntityKindMismatch
-MachineStateConflict
-InputNotSupported
-ConditionTimedOut
-OperationCancelled
-SnapshotIncompatible
-ProtocolVersionMismatch
-RuntimeInitializationFailed
-InternalBrainFailure
-```
-
-Each error contains a stable code, concise message, relevant logical IDs/paths, and optional structured details. Stack traces are logged and included in diagnostic bundles, not placed in normal protocol messages.
+Each error contains a stable code and concise message; relevant logical IDs, paths, and structured details are included where applicable. Protocol failures and core domain failures remain distinct. Stack traces are logged and included in diagnostic bundles, not placed in normal protocol messages.
 
 ## Security and resource policy
 
@@ -589,36 +566,27 @@ Every step has tick and wall-clock limits. A failure produces the diagnostic bun
 - pin Java baseline, Scala, SBT, plugins, direct libraries, security overrides, and the brain submodule commit
 - use a checked download of the SBT launcher through repository wrapper scripts; do not commit the launcher binary
 - declare each used library directly when its first caller is added, even when it is available transitively
-- keep ocelot-brain unmodified in Phase 1; carry any necessary patch as a documented commit in a dedicated fork only after approval
+- keep ocelot-brain unmodified; carry any necessary patch as a documented commit in a dedicated fork only after approval
 - enable Scalafmt and strict first-party compiler warnings without imposing them on the upstream submodule
 - create one fat executable JAR from `harness-app`
-- expose one canonical verification command used locally and by future CI
+- expose one canonical verification command that hosted CI can invoke without duplicating build policy
 
-Feature library candidates, added only with their first caller:
-
-```text
-Typesafe Config 1.4.4
-uPickle/uJson 3.3.1
-scopt 4.1.0
-ScalaTest 3.2.19 (test)
-```
-
-The foundation milestone confirmed the toolchain, brain runtime graph, and ScalaTest version, and declares Typesafe Config 1.4.4 directly for restrictive generated brain configuration. Remaining candidate feature versions are rechecked when their corresponding behavior is implemented.
+First-party direct libraries are Typesafe Config 1.4.4 in `harness-core`, ujson 3.3.1 in `harness-app`, and ScalaTest 3.2.19 for tests. The dependency report and SBOM under `docs/release/` record the complete assembled graph and licenses.
 
 ## Module quality assessment
 
 | Criterion | Decision |
 |---|---|
 | Depth | Core callers issue intention-level operations; lifecycle, threading, brain APIs, slot indexes, and cleanup remain hidden |
-| Leverage | One core API serves CLI, Pi tooling, tests, and both transports |
+| Leverage | One core API serves CLI, agent integrations, tests, and both transports |
 | Locality | Runtime, project validation, simulation, input, and screen behavior each have one invariant owner behind the core boundary |
 | Seams | ocelot-brain is a true external dependency; stdio and loopback are two real transport adapters |
 | Deletion test | No generic backend interface or one-method wrapper layers are introduced in Phase 1 |
 | Test surface | Public core behavior and protocol contracts are primary; pure render/validation algorithms receive focused direct tests |
 
-## Approved baseline
+## Phase 1 baseline decisions
 
-Phase 1 implementation approval confirms:
+The delivered Phase 1 baseline established:
 
 1. Phase 1 scope and exclusions
 2. HOCON manifest shape and path policy

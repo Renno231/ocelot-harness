@@ -33,7 +33,7 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 
 - Project topology can be reviewed and version-controlled.
 - Random runtime addresses do not destabilize scripts or tests.
-- Pi tooling and the general CLI use one command contract.
+- Agent integrations and the general CLI use one command contract.
 - The service can remain alive and advance continuously between shell commands while users observe and control the same session through one or more viewers.
 - Loopback lifecycle metadata and authentication require dedicated security and stale-process tests.
 - Schema and protocol changes require compatibility policy and contract tests.

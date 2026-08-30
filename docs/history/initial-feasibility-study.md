@@ -1,4 +1,6 @@
-# Ocelot Desktop agent-automation feasibility
+# Initial Ocelot Desktop agent-automation feasibility study
+
+> **Historical record:** This study predates the implementation. Its upstream analysis and design rationale remain useful, but its gap list, proposed command surface, and phased roadmap do not describe current Ocelot Harness behavior. Use the [documentation index](../README.md) for current guides and references.
 
 - **Assessment:** viable, with a small Ocelot integration layer
 - **Recommended direction:** a long-lived local automation service plus a general CLI; Pi-specific tools should be a thin adapter over the same service
