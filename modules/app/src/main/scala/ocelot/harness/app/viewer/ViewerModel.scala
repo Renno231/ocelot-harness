@@ -7,6 +7,20 @@ import ocelot.harness.core.workspace.{ScreenCell, ScreenSnapshot}
 
 private[app] final case class ViewerCell(x: Int, y: Int)
 
+private[app] final case class ViewerViewportSize(width: Int, height: Int)
+private[app] object ViewerViewportSize {
+  def fit(
+      imageWidth: Int,
+      imageHeight: Int,
+      maximumWidth: Int,
+      maximumHeight: Int
+  ): ViewerViewportSize = {
+    require(imageWidth > 0 && imageHeight > 0, "image dimensions must be positive")
+    require(maximumWidth > 0 && maximumHeight > 0, "maximum dimensions must be positive")
+    ViewerViewportSize(math.min(imageWidth, maximumWidth), math.min(imageHeight, maximumHeight))
+  }
+}
+
 private[app] final case class ViewerClockStatus(
     state: String,
     targetTps: Int,

@@ -127,6 +127,11 @@ final class ViewerModelSpec extends AnyFunSuite with Matchers {
       .isLeft shouldBe true
   }
 
+  test("viewer viewport uses native raster dimensions and only shrinks to desktop bounds") {
+    ViewerViewportSize.fit(320, 128, 1800, 900) shouldBe ViewerViewportSize(320, 128)
+    ViewerViewportSize.fit(2560, 1600, 1800, 900) shouldBe ViewerViewportSize(1800, 900)
+  }
+
   test("image pixels map to bounded one-based screen cells") {
     val geometry = ViewerGeometry(
       screenWidth = 40,
@@ -140,6 +145,12 @@ final class ViewerModelSpec extends AnyFunSuite with Matchers {
     geometry.cellAt(16, 32) shouldBe Some(ViewerCell(2, 2))
     geometry.cellAt(-1, 0) shouldBe None
     geometry.cellAt(640, 0) shouldBe None
+  }
+
+  test("viewer options use native scale and 20 FPS polling by default") {
+    val defaults = ViewerOptions.parse(Vector.empty).toOption.get
+    defaults.scale shouldBe 1
+    defaults.refreshMillis shouldBe 50L
   }
 
   test("viewer options are bounded and accept an explicit initial screen") {

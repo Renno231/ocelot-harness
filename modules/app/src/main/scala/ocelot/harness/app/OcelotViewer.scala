@@ -24,6 +24,7 @@ import java.util.concurrent.{
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import javax.swing.{
   BorderFactory,
+  BoxLayout,
   JButton,
   JComboBox,
   JFrame,
@@ -31,6 +32,7 @@ import javax.swing.{
   JPanel,
   JScrollPane,
   JSpinner,
+  ScrollPaneConstants,
   SpinnerNumberModel,
   SwingUtilities,
   Timer,
@@ -41,7 +43,13 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import ocelot.harness.app.protocol.{AppExitCode, LoopbackConnection, RpcClientFailure}
-import ocelot.harness.app.viewer.{ViewerCell, ViewerClockStatus, ViewerGeometry, ViewerProtocol}
+import ocelot.harness.app.viewer.{
+  ViewerCell,
+  ViewerClockStatus,
+  ViewerGeometry,
+  ViewerProtocol,
+  ViewerViewportSize
+}
 import ocelot.harness.core.artifact.{RenderOptions, ScreenRenderer}
 import ocelot.harness.core.project.ScreenId
 import ocelot.harness.core.workspace.ScreenSnapshot
@@ -100,8 +108,8 @@ private[app] object ViewerOptions {
       arguments,
       Paths.get(".").toAbsolutePath.normalize(),
       initialScreen = None,
-      scale = 2,
-      refreshMillis = 100L
+      scale = 1,
+      refreshMillis = 50L
     )
   }
 
@@ -210,6 +218,8 @@ private final class ViewerWindow(
   private val frame = new JFrame("Ocelot Harness Viewer")
   private val status = new JLabel("Connecting…")
   private val screenPanel = new ViewerScreenPanel(handleGesture, handleScroll, handleKey)
+  private val scroll = new JScrollPane(screenPanel)
+  private val controls = new JPanel()
   private val selector = new JComboBox[String](screenIds.map(_.value).toArray)
   private val clockToggle = new JButton("Pause")
   private val clockStep = new JButton("Step")
@@ -242,29 +252,32 @@ private final class ViewerWindow(
       submitClock("simulation.rate", ujson.Obj("tps" -> tps))
     })
 
-    val actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0))
-    actions.add(clockToggle)
-    actions.add(clockStep)
-    actions.add(targetTps)
-    actions.add(setRate)
-    actions.add(paste)
+    val projectActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
+    projectActions.add(selector)
+    projectActions.add(paste)
 
-    val controls = new JPanel(new BorderLayout(8, 0))
-    controls.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6))
-    controls.add(selector, BorderLayout.WEST)
-    controls.add(status, BorderLayout.CENTER)
-    controls.add(actions, BorderLayout.EAST)
+    val clockActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
+    clockActions.add(clockToggle)
+    clockActions.add(clockStep)
 
-    val scroll = new JScrollPane(screenPanel)
+    val rateActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
+    rateActions.add(targetTps)
+    rateActions.add(setRate)
+
+    controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS))
+    controls.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4))
+    status.setPreferredSize(new Dimension(300, status.getPreferredSize.height))
+    controls.add(projectActions)
+    controls.add(clockActions)
+    controls.add(rateActions)
+    controls.add(status)
+
+    scroll.setBorder(BorderFactory.createEmptyBorder())
+    scroll.setViewportBorder(null)
     scroll.getViewport.setBackground(Color.BLACK)
-
     frame.add(controls, BorderLayout.NORTH)
     frame.add(scroll, BorderLayout.CENTER)
-    frame.setMinimumSize(new Dimension(480, 320))
-    frame.pack()
     frame.setLocationByPlatform(true)
-    frame.setVisible(true)
-    screenPanel.requestFocusInWindow()
 
     refreshTimer.setCoalesce(true)
     refreshTimer.start()
@@ -314,11 +327,32 @@ private final class ViewerWindow(
           lastRendered.set(id -> snapshot.revision)
           SwingUtilities.invokeLater(() => {
             if (!closed.get() && selectedScreen.get() == id) {
-              screenPanel.update(snapshot, image)
+              val dimensionsChanged = screenPanel.update(snapshot, image)
+              if (dimensionsChanged || !frame.isVisible) fitFrameToImage(image)
             }
           })
       }
     }
+  }
+
+  private def fitFrameToImage(image: BufferedImage): Unit = {
+    val desktop = GraphicsEnvironment.getLocalGraphicsEnvironment.getMaximumWindowBounds
+    val maximumWidth = math.max(1, desktop.width - 48)
+    val maximumHeight = math.max(1, desktop.height - controls.getPreferredSize.height - 72)
+    val viewport =
+      ViewerViewportSize.fit(image.getWidth, image.getHeight, maximumWidth, maximumHeight)
+    scroll.setHorizontalScrollBarPolicy(
+      if (viewport.width < image.getWidth) ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
+      else ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+    )
+    scroll.setVerticalScrollBarPolicy(
+      if (viewport.height < image.getHeight) ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+      else ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER
+    )
+    scroll.setPreferredSize(new Dimension(viewport.width, viewport.height))
+    frame.pack()
+    if (!frame.isVisible) frame.setVisible(true)
+    screenPanel.requestFocusInWindow()
   }
 
   private def submitRefresh(): Unit =
@@ -371,11 +405,12 @@ private final class ViewerWindow(
         if (previousClock == null || previousClock.targetTps != clock.targetTps)
           targetTps.setValue(Integer.valueOf(clock.targetTps))
         status.setForeground(Color.DARK_GRAY)
-        status.setText(
+        val message =
           f"$id • ${snapshot.width}×${snapshot.height} • rev ${snapshot.revision} • " +
             f"${clock.state} • ${clock.targetTps}%d TPS target • ${clock.measuredTps}%.1f measured • " +
             s"${clock.overrunCount} overruns"
-        )
+        status.setText(message)
+        status.setToolTipText(message)
       }
     })
   }
@@ -456,6 +491,12 @@ private final class ViewerWindow(
       if (!closed.get()) {
         status.setForeground(new Color(0xb00020))
         status.setText(message)
+        status.setToolTipText(message)
+        if (!frame.isVisible) {
+          scroll.setPreferredSize(new Dimension(320, 120))
+          frame.pack()
+          frame.setVisible(true)
+        }
       }
     })
 
@@ -525,7 +566,10 @@ private final class ViewerScreenPanel(
         .foreach(name => key(ViewerKey.Special(name, false)))
   })
 
-  def update(snapshot: ScreenSnapshot, rendered: BufferedImage): Unit = {
+  def update(snapshot: ScreenSnapshot, rendered: BufferedImage): Boolean = {
+    val dimensionsChanged = image.forall(value =>
+      value.getWidth != rendered.getWidth || value.getHeight != rendered.getHeight
+    )
     image = Some(rendered)
     geometry = Some(
       ViewerGeometry(snapshot.width, snapshot.height, rendered.getWidth, rendered.getHeight)
@@ -533,6 +577,7 @@ private final class ViewerScreenPanel(
     setPreferredSize(new Dimension(rendered.getWidth, rendered.getHeight))
     revalidate()
     repaint()
+    dimensionsChanged
   }
 
   override protected def paintComponent(graphics: Graphics): Unit = {

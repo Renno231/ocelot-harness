@@ -48,10 +48,10 @@ ocelot-viewer [--project <path>] [--screen <id>] [--scale <1..8>] [--refresh-ms 
 
 - `--project` defaults to the current directory.
 - `--screen` selects the initial logical screen; otherwise the first declared screen is selected.
-- `--scale` is an integer nearest-neighbor scale and defaults to `2`.
-- `--refresh-ms` is the selected-screen polling interval and defaults to `100` milliseconds.
+- `--scale` is an integer nearest-neighbor scale and defaults to the native `1×` raster. Larger explicit scales use scroll bars rather than exceeding the usable desktop.
+- `--refresh-ms` is the selected-screen polling interval and defaults to `50` milliseconds (20 polls per second).
 
-Only the selected screen is polled. A persistent authenticated connection is reused, and the image is rerendered only when the immutable screen revision changes.
+Only the selected screen is polled. A persistent authenticated connection is reused, and the image is rerendered only when the immutable screen revision changes. The window waits for the first rendered snapshot before appearing, sizes its viewport to the native raster, and shrinks only when necessary to fit the usable desktop.
 
 ## Controls
 
