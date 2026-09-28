@@ -21,3 +21,8 @@ project/project/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# User robot programs and raw local evidence are not repository deliverables.
+/robot-programs/
+/.taskreports/
+/.cache/

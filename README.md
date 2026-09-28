@@ -26,6 +26,10 @@ Start here:
 
 The documentation index separates current user guides from historical design and implementation records.
 
+## Related project: OC Robot Accelerator
+
+[OC Robot Accelerator](https://github.com/Renno231/oc-robot-accelerator) runs real OpenComputers robot programs in accelerated Minecraft 1.12.2 / Forge worlds, with configurable native hardware, bounded jobs and offline sampled replay. It is an independent project with its own runtime, build and releases; neither project depends on the other. The local sibling checkout is `../oc-robot-accelerator/`.
+
 ## Implemented capabilities
 
 - versioned HOCON project manifests with stable logical device IDs
