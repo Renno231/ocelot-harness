@@ -8,7 +8,8 @@ import java.security.MessageDigest
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import javax.imageio.ImageIO
+import javax.imageio.{IIOImage, ImageIO, ImageWriteParam}
+import javax.imageio.stream.ImageOutputStream
 
 import ocelot.harness.core.HarnessError
 import ocelot.harness.core.HarnessError.{
@@ -45,10 +46,35 @@ private[harness] final class ArtifactStore(
     if (image == null) Left(ArtifactWriteFailed("image is required"))
     else {
       try {
-        val output = new ByteArrayOutputStream()
-        if (!ImageIO.write(image, "png", output))
-          Left(ArtifactWriteFailed("PNG writer is unavailable"))
-        else writeBytes(relativePath, output.toByteArray, "image/png")
+        val writers = ImageIO.getImageWritersByFormatName("png")
+        if (!writers.hasNext) Left(ArtifactWriteFailed("PNG writer is unavailable"))
+        else {
+          val writer = writers.next()
+          val output = new ByteArrayOutputStream()
+          var imageOutput = Option.empty[ImageOutputStream]
+          try {
+            imageOutput = Option(ImageIO.createImageOutputStream(output))
+            imageOutput match {
+              case None => Left(ArtifactWriteFailed("PNG writer is unavailable"))
+              case Some(stream) =>
+                writer.setOutput(stream)
+                val parameters = writer.getDefaultWriteParam
+                if (parameters.canWriteCompressed) {
+                  parameters.setCompressionMode(ImageWriteParam.MODE_EXPLICIT)
+                  parameters.setCompressionQuality(0.0f)
+                }
+                writer.write(null, new IIOImage(image, null, null), parameters)
+                stream.flush()
+                writeBytes(relativePath, output.toByteArray, "image/png")
+            }
+          } finally {
+            try imageOutput.foreach(_.close())
+            finally {
+              try writer.dispose()
+              finally output.close()
+            }
+          }
+        }
       } catch {
         case NonFatal(error) => Left(ArtifactWriteFailed(errorMessage(error)))
       }
