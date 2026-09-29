@@ -271,6 +271,23 @@ class PackageReleaseTests(unittest.TestCase):
             self.assertEqual(shell_mode, 0o755)
             self.assertEqual(cmd_mode, 0o644)
 
+    def test_read_only_runtime_modes_are_preserved_without_leaving_staging(self) -> None:
+        runtime = self.base / "runtime.zip"
+        make_windows_runtime(runtime)
+        self.fixture.set_pin("windows-x64", runtime)
+        result = self.fixture.package("windows-x64", runtime)
+        root = "ocelot-harness-0.1.0-windows-x64"
+
+        self.assertEqual(
+            list(self.fixture.output.glob(".ocelot-release-stage-*")),
+            [],
+            "output-local staging must be removed on Windows",
+        )
+        with zipfile.ZipFile(result) as archive:
+            license_info = archive.getinfo(f"{root}/runtime/LICENSE")
+            self.assertEqual((license_info.external_attr >> 16) & 0o777, 0o544)
+            self.assertEqual(archive.read(license_info), b"runtime license\n")
+
     def test_private_outputs_nested_in_example_are_not_packaged(self) -> None:
         runtime = self.base / "runtime.zip"
         make_windows_runtime(runtime)

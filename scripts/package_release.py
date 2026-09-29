@@ -211,7 +211,6 @@ def _extract_tar_runtime(
             raise PackagingError("runtime archive exceeds extraction limits")
         _validate_member_graph((path for _, path in entries if path is not None), symlink_paths)
 
-        directory_modes: list[tuple[Path, int]] = []
         virtual_links: list[VirtualSymlink] = []
         file_modes: dict[PurePosixPath, int] = {}
         for member, relative in entries:
@@ -219,7 +218,6 @@ def _extract_tar_runtime(
             target = destination.joinpath(*relative.parts)
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
-                directory_modes.append((target, member.mode & 0o777))
             elif member.isfile():
                 target.parent.mkdir(parents=True, exist_ok=True)
                 extracted = source.extractfile(member)
@@ -228,14 +226,11 @@ def _extract_tar_runtime(
                 with extracted, target.open("wb") as output:
                     shutil.copyfileobj(extracted, output)
                 mode = member.mode & 0o777
-                target.chmod(mode)
                 file_modes[PurePosixPath("runtime") / relative] = mode
             else:
                 virtual_links.append(
                     VirtualSymlink(PurePosixPath("runtime") / relative, member.linkname, member.mode & 0o777)
                 )
-        for directory, mode in reversed(directory_modes):
-            directory.chmod(mode)
         return virtual_links, file_modes
 
 
@@ -277,14 +272,12 @@ def _extract_zip_runtime(
         if len(entries) > MAX_RUNTIME_FILES or total_size > MAX_RUNTIME_BYTES:
             raise PackagingError("runtime archive exceeds extraction limits")
 
-        directory_modes: list[tuple[Path, int]] = []
         file_modes: dict[PurePosixPath, int] = {}
         for info, relative in entries:
             assert relative is not None
             target = destination.joinpath(*relative.parts)
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
-                directory_modes.append((target, _zip_mode(info, 0o755)))
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 try:
@@ -293,10 +286,7 @@ def _extract_zip_runtime(
                 except (OSError, zipfile.BadZipFile) as error:
                     raise PackagingError(f"cannot read runtime archive entry {info.filename}: {error}") from error
                 mode = _zip_mode(info, 0o644)
-                target.chmod(mode)
                 file_modes[PurePosixPath("runtime") / relative] = mode
-        for directory, mode in reversed(directory_modes):
-            directory.chmod(mode)
     return [], file_modes
 
 
@@ -713,11 +703,13 @@ def package_release(
         os.replace(temporary_sidecar, sidecar)
         temporary_sidecar = None
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
-        if temporary_archive is not None:
-            temporary_archive.unlink(missing_ok=True)
-        if temporary_sidecar is not None:
-            temporary_sidecar.unlink(missing_ok=True)
+        try:
+            shutil.rmtree(staging)
+        finally:
+            if temporary_archive is not None:
+                temporary_archive.unlink(missing_ok=True)
+            if temporary_sidecar is not None:
+                temporary_sidecar.unlink(missing_ok=True)
     return archive
 
 
