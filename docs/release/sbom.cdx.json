@@ -5,12 +5,12 @@
   "metadata": {
     "component": {
       "type": "application",
-      "bom-ref": "pkg:maven/org.ocelot-harness/harness-app_2.13@0.1.0",
+      "bom-ref": "pkg:maven/org.ocelot-harness/harness-app_2.13@0.1.1",
       "group": "org.ocelot-harness",
       "name": "harness-app_2.13",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "licenses": [{ "license": { "id": "MIT" } }],
-      "purl": "pkg:maven/org.ocelot-harness/harness-app_2.13@0.1.0"
+      "purl": "pkg:maven/org.ocelot-harness/harness-app_2.13@0.1.1"
     }
   },
   "components": [

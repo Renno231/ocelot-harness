@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 
-DEFAULT_VERSION = "0.1.0"
+DEFAULT_VERSION = "0.1.1"
 DEFAULT_JAVA_VERSION = "21"
 JAVA_VERSIONS = ("8", "17", "21")
 PLATFORMS = ("windows-x64", "linux-x64")

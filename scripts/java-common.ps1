@@ -7,9 +7,6 @@ function Resolve-OcelotJava([string] $Root, [string] $SelectionMode) {
     if ($env:OCELOT_JAVA) {
         $candidate = $env:OCELOT_JAVA
         $source = 'OCELOT_JAVA'
-    } elseif ($SelectionMode -eq 'runtime' -and (Test-Path -LiteralPath (Join-Path $Root 'runtime') -PathType Container)) {
-        $candidate = Join-Path $Root 'runtime\bin\java.exe'
-        $source = 'bundled runtime'
     } elseif ($env:JAVA_HOME) {
         $candidate = Join-Path $env:JAVA_HOME 'bin\java.exe'
         $source = 'JAVA_HOME'
@@ -17,6 +14,10 @@ function Resolve-OcelotJava([string] $Root, [string] $SelectionMode) {
         $command = Get-Command java -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         $candidate = if ($command) { $command.Source } else { '' }
         $source = 'PATH'
+        if (-not $candidate -and $SelectionMode -eq 'runtime' -and (Test-Path -LiteralPath (Join-Path $Root 'runtime') -PathType Container)) {
+            $candidate = Join-Path $Root 'runtime\bin\java.exe'
+            $source = 'bundled runtime'
+        }
     }
     if (-not $candidate -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
         throw "Java 8 or newer is required; invalid Java executable selected through $($source): $candidate"

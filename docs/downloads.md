@@ -6,13 +6,13 @@ Ocelot Harness runs OpenComputers software in the Ocelot Brain emulator, without
 
 Get a platform archive from the [GitHub releases page](https://github.com/Renno231/ocelot-harness/releases/latest):
 
-| Bundled Java | Windows x64 | glibc-based Linux x64 |
+| Bundled fallback Java | Windows x64 | glibc-based Linux x64 |
 |---|---|---|
-| **21 (recommended)** | `ocelot-harness-0.1.0-windows-x64-java21.zip` | `ocelot-harness-0.1.0-linux-x64-java21.tar.gz` |
-| 17 | `ocelot-harness-0.1.0-windows-x64-java17.zip` | `ocelot-harness-0.1.0-linux-x64-java17.tar.gz` |
-| 8 | `ocelot-harness-0.1.0-windows-x64-java8.zip` | `ocelot-harness-0.1.0-linux-x64-java8.tar.gz` |
+| **21 (recommended)** | `ocelot-harness-0.1.1-windows-x64-java21.zip` | `ocelot-harness-0.1.1-linux-x64-java21.tar.gz` |
+| 17 | `ocelot-harness-0.1.1-windows-x64-java17.zip` | `ocelot-harness-0.1.1-linux-x64-java17.tar.gz` |
+| 8 | `ocelot-harness-0.1.1-windows-x64-java8.zip` | `ocelot-harness-0.1.1-linux-x64-java8.tar.gz` |
 
-Each includes the same application, launchers and examples, plus the named Eclipse Temurin runtime. **You do not need to install Java, SBT, Scala or a compiler, or change your system Java.** Extract the complete archive before running it. Do not move individual launchers away from the rest of the package. macOS, ARM and musl/Alpine packages are not provided.
+Each includes the same application, launchers and examples, plus the named Eclipse Temurin runtime as a fallback. **Your installed Java is used first.** **You do not need to install Java, SBT, Scala or a compiler, or change your system Java.** Extract the complete archive before running it. Do not move individual launchers away from the rest of the package. macOS, ARM and musl/Alpine packages are not provided.
 
 Compare the archive's SHA-256 with its adjacent `.sha256` file. On Windows use `Get-FileHash PATH_TO_ZIP -Algorithm SHA256`; on Linux use `sha256sum -c PATH_TO_ARCHIVE.sha256` from the directory containing both files. The archive also contains `RELEASE-MANIFEST.json` with source, dependency/runtime identity and payload hashes.
 
@@ -64,11 +64,21 @@ The viewer requires a graphical desktop/display and the usual X11/font libraries
 Launchers select Java in this order:
 
 1. `OCELOT_JAVA`, if explicitly set to a Java executable.
-2. The package's bundled `runtime/`.
-3. `JAVA_HOME/bin/java`, when no bundled runtime is present.
-4. `java` on `PATH`.
+2. `JAVA_HOME/bin/java`, if `JAVA_HOME` is set.
+3. `java` on `PATH`.
+4. The package's bundled `runtime/`, when no system Java is configured or found.
 
-**Java 8, 17 and 21 are supported for both application execution and source builds.** Each download actually runs on its named bundled version; the Java 21 edition runs on Java 21. You may also select an installed supported version with `OCELOT_JAVA`. An explicit invalid override fails with an explanation instead of silently selecting another runtime. Unset `OCELOT_JAVA` to return to the bundled runtime. Launchers enforce only a minimum of Java 8, not an exact-version allowlist. Other Java major versions are allowed but outside the verified matrix.
+**Java 8, 17 and 21 are supported for both application execution and source builds.** The edition name identifies the fallback runtime, not a requirement to use it. Unset `OCELOT_JAVA` to return to automatic system-first selection. A selected Java that is missing, fails to start, or is below Java 8 produces an error rather than silently switching versions; fix the selection or explicitly choose the bundle. Other Java major versions are allowed but outside the verified matrix.
+
+To explicitly use the bundled runtime, from the extracted application directory:
+
+```powershell
+$env:OCELOT_JAVA = (Resolve-Path .\runtime\bin\java.exe).Path
+```
+
+```sh
+export OCELOT_JAVA="$PWD/runtime/bin/java"
+```
 
 For a source checkout, set `JAVA_HOME` to a Java 8, 17 or 21 JDK or `OCELOT_JAVA` to its Java executable. Build wrappers honor those settings directly; a global PATH change is unnecessary.
 

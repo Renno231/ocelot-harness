@@ -281,7 +281,7 @@ class PackageReleaseTests(unittest.TestCase):
                         make_linux_runtime(runtime, java_version=java_version)
                     self.fixture.set_pin(platform, runtime, java_version)
                     result = self.fixture.package(platform, runtime, java_version=java_version)
-                    root = f"ocelot-harness-0.1.0-{platform}-java{java_version}"
+                    root = f"ocelot-harness-0.1.1-{platform}-java{java_version}"
                     self.assertEqual(result.name, root + suffix)
 
                     if platform == "windows-x64":
@@ -353,7 +353,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_linux_runtime(runtime)
         self.fixture.set_pin("linux-x64", runtime)
         result = self.fixture.package("linux-x64", runtime)
-        root = "ocelot-harness-0.1.0-linux-x64-java21"
+        root = "ocelot-harness-0.1.1-linux-x64-java21"
 
         with tarfile.open(result, "r:gz") as archive:
             members = {member.name.rstrip("/"): member for member in archive.getmembers()}
@@ -418,7 +418,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         result = self.fixture.package("windows-x64", runtime)
-        root = "ocelot-harness-0.1.0-windows-x64-java21"
+        root = "ocelot-harness-0.1.1-windows-x64-java21"
 
         with zipfile.ZipFile(result) as archive:
             names = set(archive.namelist())
@@ -440,7 +440,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         result = self.fixture.package("windows-x64", runtime)
-        root = "ocelot-harness-0.1.0-windows-x64-java21"
+        root = "ocelot-harness-0.1.1-windows-x64-java21"
 
         self.assertEqual(
             list(self.fixture.output.glob(".ocelot-release-stage-*")),
@@ -531,7 +531,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         self.fixture.output.mkdir()
-        unrelated = self.fixture.output / "ocelot-harness-0.1.0-windows-x64-java21.zip"
+        unrelated = self.fixture.output / "ocelot-harness-0.1.1-windows-x64-java21.zip"
         unrelated.write_bytes(b"do not overwrite")
         with self.assertRaisesRegex(package_release.PackagingError, "refusing to overwrite"):
             self.fixture.package("windows-x64", runtime)

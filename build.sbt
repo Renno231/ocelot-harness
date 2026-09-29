@@ -6,7 +6,7 @@ import scala.sys.process._
 val supportedScalaVersion = "2.13.16"
 
 ThisBuild / organization := "org.ocelot-harness"
-ThisBuild / version := "0.1.0"
+ThisBuild / version := "0.1.1"
 ThisBuild / scalaVersion := supportedScalaVersion
 
 lazy val commonSettings = Seq(

@@ -47,6 +47,7 @@ class Launchers(unittest.TestCase):
         self.assertIn('project init', p.stdout)
 
     def test_explicit_java_overrides_bad_java_home(self):
+        (self.root / 'runtime').mkdir()
         self.env.update(OCELOT_JAVA=str(JAVA), JAVA_HOME=str(self.base / 'missing'))
         p = self.run_cli('--help')
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -64,6 +65,7 @@ class Launchers(unittest.TestCase):
         self.assertIn('Java 8 or newer is required', p.stderr)
 
     def test_unsupported_path_java_is_rejected(self):
+        self.bundle_runtime()
         p = self.run_cli('--help')
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('Java 8 or newer is required', p.stderr)
@@ -80,19 +82,73 @@ class Launchers(unittest.TestCase):
                 p = self.run_cli('--help')
                 self.assertEqual(p.returncode, 37, p.stderr)
 
-    def test_bundled_runtime_precedes_java_home_and_path(self):
+    def bundle_runtime(self):
         runtime = self.root / 'runtime'
         if WINDOWS:
             subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', str(runtime), str(JAVA_HOME)], check=True, capture_output=True)
+            self.addCleanup(os.rmdir, runtime)
         else:
             runtime.symlink_to(JAVA_HOME, target_is_directory=True)
-        try:
-            self.env['JAVA_HOME'] = str(self.base / 'missing')
-            p = self.run_cli('--help')
-            self.assertEqual(p.returncode, 0, p.stderr)
-        finally:
-            if WINDOWS: os.rmdir(runtime)
-            else: runtime.unlink()
+            self.addCleanup(runtime.unlink)
+
+    def remove_path_java(self):
+        if WINDOWS:
+            system = Path(os.environ['SystemRoot']) / 'System32'
+            self.env['PATH'] = str(system) + os.pathsep + str(system / 'WindowsPowerShell/v1.0')
+        else:
+            tools = self.base / 'system tools'
+            tools.mkdir()
+            for name in ('sh', 'dirname', 'sed', 'head'):
+                (tools / name).symlink_to(shutil.which(name))
+            self.env['PATH'] = str(tools)
+
+    def test_java_home_precedes_bundled_runtime(self):
+        (self.root / 'runtime').mkdir()  # A broken bundle must not affect installed Java.
+        self.env['JAVA_HOME'] = str(JAVA_HOME)
+        p = self.run_cli('--help')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('project init', p.stdout)
+
+    def test_path_java_precedes_bundled_runtime(self):
+        (self.root / 'runtime').mkdir()
+        self.env['PATH'] = str(JAVA.parent) + os.pathsep + self.env['PATH']
+        p = self.run_cli('--help')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('project init', p.stdout)
+
+    def test_bundled_runtime_is_used_without_system_java(self):
+        self.bundle_runtime()
+        self.remove_path_java()
+        p = self.run_cli('--help')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('project init', p.stdout)
+
+    def test_invalid_java_home_does_not_silently_fall_back(self):
+        self.bundle_runtime()
+        self.env['JAVA_HOME'] = str(self.base / 'missing')
+        p = self.run_cli('--help')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('JAVA_HOME', p.stderr)
+
+    def test_missing_system_and_bundled_java_is_actionable(self):
+        self.remove_path_java()
+        p = self.run_cli('--help')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('Java 8 or newer is required', p.stderr)
+
+    def test_build_mode_does_not_select_bundled_jre(self):
+        self.bundle_runtime()
+        self.remove_path_java()
+        if WINDOWS:
+            command = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                       str(self.bin / 'java-common.ps1'), '-JavaSelectionRoot', str(self.root),
+                       '-JavaSelectionMode', 'build']
+        else:
+            command = ['sh', '-c', '. "$1"; ocelot_select_java "$2" build', 'sh',
+                       str(self.bin / 'java-common.sh'), str(self.root)]
+        p = subprocess.run(command, env=self.env, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('Java 8 or newer is required', p.stderr)
 
     def test_paths_and_arguments_with_spaces(self):
         self.env['JAVA_HOME'] = str(JAVA_HOME)

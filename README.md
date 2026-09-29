@@ -11,7 +11,7 @@ project manifest + host files
 
 ## Downloads
 
-[Download Ocelot Harness for Windows x64 or Linux x64](https://github.com/Renno231/ocelot-harness/releases/latest). Choose a **Java 21, Java 17 or Java 8** edition. Each platform archive includes its named Java runtime: **no Java installation, SBT build or system PATH change is needed**. Java 21 is the recommended edition.
+[Download Ocelot Harness for Windows x64 or Linux x64](https://github.com/Renno231/ocelot-harness/releases/latest). Choose a **Java 21, Java 17 or Java 8** edition. Launchers use your **system Java first** (`JAVA_HOME`, then `PATH`); each archive also includes its named Java runtime as a fallback when no system Java is configured or found. **No Java installation, SBT build or system PATH change is needed.** `OCELOT_JAVA` can explicitly select a runtime. Java 21 is the recommended fallback edition.
 
 Extract the complete archive and follow the [download quick start](docs/downloads.md). Source-checkout commands below use `scripts/`; downloads provide the same commands under `bin/`.
 

@@ -1,4 +1,4 @@
-# Ocelot Harness 0.1.0 dependency report
+# Ocelot Harness 0.1.1 dependency report
 
 Generated from `harnessApp/dependencyTree` for the assembled runtime on 2026-09-29. Test-only dependencies are listed separately and are not packaged.
 

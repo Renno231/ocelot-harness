@@ -5,15 +5,16 @@ ocelot_select_java() {
   if [ -n "${OCELOT_JAVA:-}" ]; then
     ocelot_java=$OCELOT_JAVA
     ocelot_java_source=OCELOT_JAVA
-  elif [ "$ocelot_mode" = runtime ] && [ -d "$ocelot_root/runtime" ]; then
-    ocelot_java="$ocelot_root/runtime/bin/java"
-    ocelot_java_source='bundled runtime'
   elif [ -n "${JAVA_HOME:-}" ]; then
     ocelot_java="$JAVA_HOME/bin/java"
     ocelot_java_source=JAVA_HOME
   else
     ocelot_java=$(command -v java 2>/dev/null || true)
     ocelot_java_source=PATH
+    if [ -z "$ocelot_java" ] && [ "$ocelot_mode" = runtime ] && [ -d "$ocelot_root/runtime" ]; then
+      ocelot_java="$ocelot_root/runtime/bin/java"
+      ocelot_java_source='bundled runtime'
+    fi
   fi
   if [ ! -x "$ocelot_java" ] && [ -x "$ocelot_java.exe" ]; then
     ocelot_java="$ocelot_java.exe"
