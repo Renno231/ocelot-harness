@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+set -eu
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+. "$script_directory/java-common.sh"
+ocelot_select_java "$repository_root" runtime
+assembly_jar="$repository_root/lib/ocelot-harness.jar"
+if [ ! -f "$assembly_jar" ]; then
+  assembly_jar="$repository_root/modules/app/target/ocelot-harness.jar"
+fi
+if [ ! -f "$assembly_jar" ]; then
+  printf '%s\n' 'ERROR: application package is missing; re-extract the download, or build source with scripts/sbtw "harnessApp/assembly"' >&2
+  exit 1
+fi
+exec "$ocelot_java" -cp "$assembly_jar" "$@"

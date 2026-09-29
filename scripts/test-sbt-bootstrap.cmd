@@ -29,6 +29,8 @@ mkdir "%TEST_DIR%\fake-bin" >nul 2>&1
 >>"%TEST_DIR%\fake-bin\java.cmd" echo echo openjdk version "17.0.10" 1^>^&2
 >>"%TEST_DIR%\fake-bin\java.cmd" echo exit /b 0
 set "ORIGINAL_PATH=%PATH%"
+set "JAVA_HOME="
+set "OCELOT_JAVA="
 set "PATH=%TEST_DIR%\fake-bin;%PATH%"
 call "%ROOT%\scripts\sbtw.cmd" --version >"%TEST_DIR%\output.txt" 2>&1
 set "STATUS=%ERRORLEVEL%"

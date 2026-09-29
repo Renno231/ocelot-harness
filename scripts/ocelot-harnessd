@@ -1,13 +1,4 @@
 #!/usr/bin/env sh
 set -eu
-
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
-assembly_jar="$repository_root/modules/app/target/ocelot-harness.jar"
-
-if [ ! -f "$assembly_jar" ]; then
-  printf 'ERROR: application package is missing; run scripts/sbtw "harnessApp/assembly" first\n' >&2
-  exit 1
-fi
-
-exec java -jar "$assembly_jar" "$@"
+exec "$script_directory/run-harness" ocelot.harness.app.HarnessDaemon "$@"

@@ -40,7 +40,7 @@ EOF
 chmod +x "$tmp/fake-bin/java"
 
 set +e
-output=$(PATH="$tmp/fake-bin:$PATH" SBT_BOOTSTRAP_CACHE="$tmp/cache" "$root/scripts/sbtw" --version 2>&1)
+output=$(JAVA_HOME= OCELOT_JAVA= PATH="$tmp/fake-bin:$PATH" SBT_BOOTSTRAP_CACHE="$tmp/cache" "$root/scripts/sbtw" --version 2>&1)
 status=$?
 set -e
 

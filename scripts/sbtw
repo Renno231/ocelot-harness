@@ -7,22 +7,9 @@ launcher_url=${SBT_LAUNCHER_URL:-https://repo.maven.apache.org/maven2/org/scala-
 cache_root=${SBT_BOOTSTRAP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ocelot-harness/sbt}
 launcher="$cache_root/sbt-launch-$sbt_version.jar"
 
-if ! command -v java >/dev/null 2>&1; then
-  printf '%s\n' 'ERROR: Java 8 is required, but java was not found on PATH' >&2
-  exit 1
-fi
-java_version=$(java -version 2>&1) || {
-  printf '%s\n' 'ERROR: Java 8 is required, but java -version failed' >&2
-  exit 1
-}
-case "$java_version" in
-  *'version "1.8.'*) ;;
-  *)
-    printf '%s\n' 'ERROR: Java 8 is required; java -version reported:' >&2
-    printf '%s\n' "$java_version" >&2
-    exit 1
-    ;;
-esac
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_directory/java-common.sh"
+ocelot_select_java "$script_directory/.." build
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -63,4 +50,4 @@ else
   verify_launcher "$launcher"
 fi
 
-exec java -jar "$launcher" "$@"
+exec "$ocelot_java" -jar "$launcher" "$@"

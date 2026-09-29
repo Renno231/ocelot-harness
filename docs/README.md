@@ -4,6 +4,7 @@ Use the current references for installation, project authoring, commands, and op
 
 ## User guides
 
+- [Download and run](downloads.md)
 - [CLI reference](reference/cli.md)
 - [Manifest schema v2](reference/manifest-v2.md)
 - [Ocelot Desktop workspace import](reference/desktop-import.md)

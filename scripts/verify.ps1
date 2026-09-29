@@ -13,6 +13,9 @@ function Invoke-Checked([string] $Description, [scriptblock] $Command) {
 }
 
 try {
+    . (Join-Path $scriptDirectory 'java-common.ps1')
+    $java = Resolve-OcelotJava $repositoryRoot 'build'
+    $jarTool = Join-Path (Split-Path -Parent $java) 'jar.exe'
     $expectedBrainCommit = 'bec1cc6b1e9e588692f753e9c617063c74967fed'
     $actualBrainCommit = (& git -C lib/ocelot-brain rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) {
@@ -39,7 +42,7 @@ try {
     if (-not (Test-Path -LiteralPath $assemblyJar -PathType Leaf)) {
         throw "Expected assembly was not created at $assemblyJar"
     }
-    $jarEntries = @(& jar tf $assemblyJar)
+    $jarEntries = @(& $jarTool tf $assemblyJar)
     if ($LASTEXITCODE -ne 0 -or
         $jarEntries -notcontains 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md' -or
         $jarEntries -notcontains 'META-INF/ocelot-harness/sbom.cdx.json' -or
@@ -48,7 +51,11 @@ try {
     }
     Write-Host 'PASS: packaged release metadata and license notices'
 
-    $viewerHelp = (& java -cp $assemblyJar ocelot.harness.app.OcelotViewer --help | Out-String).Trim()
+    $env:OCELOT_TEST_JAVA_HOME = Split-Path -Parent (Split-Path -Parent $java)
+    Invoke-Checked 'launcher Java selection and installed layout' { & python "$scriptDirectory\test_launchers.py" }
+    Invoke-Checked 'release packaging contracts' { & python -m unittest scripts.test_package_release }
+
+    $viewerHelp = (& $java -cp $assemblyJar ocelot.harness.app.OcelotViewer --help | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $viewerHelp -notmatch '^usage: ocelot-viewer ') {
         throw 'Packaged viewer entrypoint is unavailable'
     }
@@ -100,7 +107,7 @@ try {
 {"jsonrpc":"2.0","id":13,"method":"service.shutdown"}
 '@
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $startInfo.FileName = 'java'
+        $startInfo.FileName = $java
         $startInfo.Arguments = "-jar `"$assemblyJar`" serve --stdio --project `"$projectDirectory`""
         $startInfo.UseShellExecute = $false
         $startInfo.RedirectStandardInput = $true

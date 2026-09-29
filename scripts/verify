@@ -4,6 +4,10 @@ set -eu
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 cd "$repository_root"
+. "$script_directory/java-common.sh"
+ocelot_select_java "$repository_root" build
+jar_tool="$(dirname -- "$ocelot_java")/jar"
+python_tool=$(command -v python3 || command -v python)
 
 expected_brain_commit=bec1cc6b1e9e588692f753e9c617063c74967fed
 actual_brain_commit=$(git -C lib/ocelot-brain rev-parse HEAD)
@@ -27,12 +31,15 @@ if [ ! -f "$assembly_jar" ]; then
   printf 'ERROR: expected assembly was not created at %s\n' "$assembly_jar" >&2
   exit 1
 fi
-jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md'
-jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/sbom.cdx.json'
-jar tf "$assembly_jar" | grep -Fxq 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt'
+jar_entries=$("$jar_tool" tf "$assembly_jar" | tr -d '\r')
+printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md'
+printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/sbom.cdx.json'
+printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt'
 printf '%s\n' 'PASS: packaged release metadata and license notices'
 
-viewer_help=$(java -cp "$assembly_jar" ocelot.harness.app.OcelotViewer --help)
+OCELOT_TEST_JAVA_HOME="$(dirname -- "$(dirname -- "$ocelot_java")")" "$python_tool" scripts/test_launchers.py
+"$python_tool" -m unittest scripts.test_package_release
+viewer_help=$("$ocelot_java" -cp "$assembly_jar" ocelot.harness.app.OcelotViewer --help)
 case "$viewer_help" in
   'usage: ocelot-viewer '*) ;;
   *)
@@ -81,7 +88,7 @@ cat >"$protocol_input" <<'EOF'
 {"jsonrpc":"2.0","id":12,"method":"diagnostics.collect","params":{"path":"diagnostics/packaged-protocol.zip"}}
 {"jsonrpc":"2.0","id":13,"method":"service.shutdown"}
 EOF
-java -jar "$assembly_jar" serve --stdio --project "$project_directory" \
+"$ocelot_java" -jar "$assembly_jar" serve --stdio --project "$project_directory" \
   <"$protocol_input" >"$protocol_output" 2>"$service_log"
 if [ -s "$service_log" ]; then
   cat "$service_log" >&2

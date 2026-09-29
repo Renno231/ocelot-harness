@@ -22,20 +22,9 @@ function Assert-LauncherChecksum([string] $Path) {
 }
 
 try {
-    if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
-        throw 'Java 8 is required, but java was not found on PATH'
-    }
-    $savedErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $javaVersion = (& java -version 2>&1 | Out-String).Trim()
-    $javaExitCode = $LASTEXITCODE
-    $ErrorActionPreference = $savedErrorActionPreference
-    if ($javaExitCode -ne 0) {
-        throw 'Java 8 is required, but java -version failed'
-    }
-    if ($javaVersion -notmatch 'version "1\.8\.') {
-        throw "Java 8 is required; java -version reported: $javaVersion"
-    }
+    $sbtArguments = $args
+    . (Join-Path $PSScriptRoot 'java-common.ps1')
+    $java = Resolve-OcelotJava (Split-Path -Parent $PSScriptRoot) 'build'
 
     New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
@@ -51,7 +40,7 @@ try {
         Assert-LauncherChecksum $launcher
     }
 
-    & java -jar $launcher @args
+    & $java -jar $launcher @sbtArguments
     exit $LASTEXITCODE
 } catch {
     [Console]::Error.WriteLine("ERROR: $($_.Exception.Message)")

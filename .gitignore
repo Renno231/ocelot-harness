@@ -25,4 +25,7 @@ Desktop.ini
 # User robot programs and raw local evidence are not repository deliverables.
 /robot-programs/
 /.taskreports/
+/.pi/
 /.cache/
+/dist/
+**/__pycache__/
