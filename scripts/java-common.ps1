@@ -19,7 +19,7 @@ function Resolve-OcelotJava([string] $Root, [string] $SelectionMode) {
         $source = 'PATH'
     }
     if (-not $candidate -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-        throw "Java 8 is required; invalid Java executable selected through $($source): $candidate"
+        throw "Java 8 or newer is required; invalid Java executable selected through $($source): $candidate"
     }
     $savedPreference = $ErrorActionPreference
     try {
@@ -29,9 +29,11 @@ function Resolve-OcelotJava([string] $Root, [string] $SelectionMode) {
     } finally {
         $ErrorActionPreference = $savedPreference
     }
-    if ($code -ne 0) { throw "Java 8 is required; selected java -version failed: $candidate" }
-    if ($version -notmatch 'version "1\.8\.') {
-        throw "Java 8 is required for this release; selected through $($source): $candidate. $version. Use the bundled download, set JAVA_HOME to Java 8, or set OCELOT_JAVA to its java executable. Java 21 is not yet supported."
+    if ($code -ne 0) { throw "Java 8 or newer is required; selected java -version failed: $candidate" }
+    $major = 0
+    if ($version -match 'version "(?:1\.)?([0-9]+)') { $major = [int] $Matches[1] }
+    if ($major -lt 8) {
+        throw "Java 8 or newer is required; selected through $($source): $candidate. $version. Use a bundled download, JAVA_HOME or OCELOT_JAVA. Verified Java versions are documented in the download guide."
     }
     return $candidate
 }

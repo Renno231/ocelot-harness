@@ -20,7 +20,17 @@ from scripts import package_release
 
 SOURCE_COMMIT = "1" * 40
 BRAIN_COMMIT = "2" * 40
-RUNTIME_ROOT = "jdk8u504-b01-jre"
+RUNTIME_ROOTS = {
+    "8": "jdk8u504-b01-jre",
+    "17": "jdk-17.0.0+fixture-jre",
+    "21": "jdk-21.0.0+fixture-jre",
+}
+RUNTIME_ROOT = RUNTIME_ROOTS[package_release.DEFAULT_JAVA_VERSION]
+FIXTURE_JAVA_VERSIONS = {
+    "8": "8u0-fixture",
+    "17": "17.0.0+fixture",
+    "21": "21.0.0+fixture",
+}
 
 
 class ReleaseFixture:
@@ -70,31 +80,42 @@ class ReleaseFixture:
                 f"harness.commit={SOURCE_COMMIT}\nharness.dirty={'true' if dirty else 'false'}\n",
             )
 
-    def set_pin(self, platform: str, archive: Path) -> None:
+    def set_pin(
+        self,
+        platform: str,
+        archive: Path,
+        java_version: str = package_release.DEFAULT_JAVA_VERSION,
+    ) -> None:
         sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
         suffix = ".zip" if platform == "windows-x64" else ".tar.gz"
-        pins = {
-            "schemaVersion": 1,
-            "runtimes": {
-                platform: {
-                    "distribution": "Fixture Temurin",
-                    "implementation": "HotSpot",
-                    "javaVersion": "8u504-b01",
-                    "archive": f"fixture-jre{suffix}",
-                    "archiveRoot": RUNTIME_ROOT,
-                    "url": f"https://example.invalid/fixture-jre{suffix}",
-                    "sha256": sha256,
-                }
-            },
-        }
         path = self.repository / "project/runtime-distributions.json"
+        if path.exists():
+            pins = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            pins = {"schemaVersion": 2, "runtimes": {}}
+        pins["runtimes"].setdefault(java_version, {})[platform] = {
+            "distribution": "Fixture Temurin",
+            "implementation": "HotSpot",
+            "javaVersion": FIXTURE_JAVA_VERSIONS[java_version],
+            "archive": f"fixture-java{java_version}-jre{suffix}",
+            "archiveRoot": RUNTIME_ROOTS[java_version],
+            "url": f"https://example.invalid/fixture-java{java_version}-jre{suffix}",
+            "sha256": sha256,
+        }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(pins), encoding="utf-8")
 
-    def package(self, platform: str, runtime: Path, output: Path | None = None) -> Path:
+    def package(
+        self,
+        platform: str,
+        runtime: Path,
+        output: Path | None = None,
+        java_version: str = package_release.DEFAULT_JAVA_VERSION,
+    ) -> Path:
         return package_release.package_release(
             repository_root=self.repository,
             platform=platform,
+            java_version=java_version,
             runtime_archive=runtime,
             output_dir=output or self.output,
             jar_path=self.jar,
@@ -114,27 +135,34 @@ def _tar_entry(name: str, data: bytes | None = None, mode: int = 0o644) -> tuple
     return info, io.BytesIO(data)
 
 
-def make_linux_runtime(path: Path, *, extra_entries=(), links=()) -> None:
+def make_linux_runtime(
+    path: Path,
+    *,
+    java_version: str = package_release.DEFAULT_JAVA_VERSION,
+    extra_entries=(),
+    links=(),
+) -> None:
+    runtime_root = RUNTIME_ROOTS[java_version]
     with tarfile.open(path, "w:gz") as archive:
         entries = (
-            _tar_entry(f"{RUNTIME_ROOT}/"),
-            _tar_entry(f"{RUNTIME_ROOT}/ASSEMBLY_EXCEPTION", b"assembly exception\n"),
-            _tar_entry(f"{RUNTIME_ROOT}/LICENSE", b"runtime license\n"),
-            _tar_entry(f"{RUNTIME_ROOT}/NOTICE", b"runtime notice\n"),
-            _tar_entry(f"{RUNTIME_ROOT}/bin/"),
-            _tar_entry(f"{RUNTIME_ROOT}/bin/java", b"java fixture\n", 0o755),
-            _tar_entry(f"{RUNTIME_ROOT}/lib/"),
-            _tar_entry(f"{RUNTIME_ROOT}/lib/amd64/"),
-            _tar_entry(f"{RUNTIME_ROOT}/lib/amd64/libjsig.so", b"libjsig fixture\n", 0o755),
-            _tar_entry(f"{RUNTIME_ROOT}/lib/amd64/server/"),
-            _tar_entry(f"{RUNTIME_ROOT}/man/"),
-            _tar_entry(f"{RUNTIME_ROOT}/man/ja_JP.UTF-8/"),
+            _tar_entry(f"{runtime_root}/"),
+            _tar_entry(f"{runtime_root}/ASSEMBLY_EXCEPTION", b"assembly exception\n"),
+            _tar_entry(f"{runtime_root}/LICENSE", b"runtime license\n"),
+            _tar_entry(f"{runtime_root}/NOTICE", b"runtime notice\n"),
+            _tar_entry(f"{runtime_root}/bin/"),
+            _tar_entry(f"{runtime_root}/bin/java", b"java fixture\n", 0o755),
+            _tar_entry(f"{runtime_root}/lib/"),
+            _tar_entry(f"{runtime_root}/lib/amd64/"),
+            _tar_entry(f"{runtime_root}/lib/amd64/libjsig.so", b"libjsig fixture\n", 0o755),
+            _tar_entry(f"{runtime_root}/lib/amd64/server/"),
+            _tar_entry(f"{runtime_root}/man/"),
+            _tar_entry(f"{runtime_root}/man/ja_JP.UTF-8/"),
         )
         for info, stream in (*entries, *extra_entries):
             archive.addfile(info, stream)
         default_links = (
-            (f"{RUNTIME_ROOT}/man/ja", "ja_JP.UTF-8"),
-            (f"{RUNTIME_ROOT}/lib/amd64/server/libjsig.so", "../libjsig.so"),
+            (f"{runtime_root}/man/ja", "ja_JP.UTF-8"),
+            (f"{runtime_root}/lib/amd64/server/libjsig.so", "../libjsig.so"),
         )
         for name, target in (*default_links, *links):
             info = tarfile.TarInfo(name)
@@ -151,12 +179,18 @@ def _zip_write(archive: zipfile.ZipFile, name: str, data: bytes, mode: int) -> N
     archive.writestr(info, data)
 
 
-def make_windows_runtime(path: Path, *, unsafe_name: str | None = None) -> None:
+def make_windows_runtime(
+    path: Path,
+    *,
+    java_version: str = package_release.DEFAULT_JAVA_VERSION,
+    unsafe_name: str | None = None,
+) -> None:
+    runtime_root = RUNTIME_ROOTS[java_version]
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        _zip_write(archive, f"{RUNTIME_ROOT}/ASSEMBLY_EXCEPTION", b"assembly exception\n", 0o544)
-        _zip_write(archive, f"{RUNTIME_ROOT}/LICENSE", b"runtime license\n", 0o544)
-        _zip_write(archive, f"{RUNTIME_ROOT}/NOTICE", b"runtime notice\n", 0o544)
-        _zip_write(archive, f"{RUNTIME_ROOT}/bin/java.exe", b"java fixture\n", 0o775)
+        _zip_write(archive, f"{runtime_root}/ASSEMBLY_EXCEPTION", b"assembly exception\n", 0o544)
+        _zip_write(archive, f"{runtime_root}/LICENSE", b"runtime license\n", 0o544)
+        _zip_write(archive, f"{runtime_root}/NOTICE", b"runtime notice\n", 0o544)
+        _zip_write(archive, f"{runtime_root}/bin/java.exe", b"java fixture\n", 0o775)
         if unsafe_name is not None:
             _zip_write(archive, unsafe_name, b"escape\n", 0o644)
 
@@ -172,24 +206,154 @@ class PackageReleaseTests(unittest.TestCase):
 
     def test_published_runtime_pins_are_exact(self) -> None:
         path = Path(__file__).resolve().parent.parent / "project/runtime-distributions.json"
-        pins = json.loads(path.read_text(encoding="utf-8"))["runtimes"]
-        self.assertEqual(
-            pins["linux-x64"]["sha256"],
-            "52dcd578baca1d3e449ea86768a9129c0ee04d7b22565695498353cc66940c61",
+        document = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(document["schemaVersion"], 2)
+        pins = document["runtimes"]
+        expected_sources = {
+            "8": (
+                "jdk8u504-b01-src",
+                "86cd14f299616dddca13268cc2fa794eb4d28fc732dedaad8c5b8a3078e5d3c9",
+            ),
+            "17": (
+                "jdk-17.0.20.1+1-src",
+                "21e2a065d244ab048e737f21af5d1fc74daaeb6707de36477ead8db1dca71214",
+            ),
+            "21": (
+                "jdk-21.0.12.1+1-src",
+                "573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234",
+            ),
+        }
+        self.assertEqual(set(document["sources"]), set(package_release.JAVA_VERSIONS))
+        for java_version, values in expected_sources.items():
+            source = document["sources"][java_version]
+            self.assertEqual((source["archiveRoot"], source["sha256"]), values)
+            self.assertIn(source["archive"], source["url"])
+
+        expected = {
+            ("8", "linux-x64"): (
+                "8u504-b01",
+                "jdk8u504-b01-jre",
+                "52dcd578baca1d3e449ea86768a9129c0ee04d7b22565695498353cc66940c61",
+            ),
+            ("8", "windows-x64"): (
+                "8u504-b01",
+                "jdk8u504-b01-jre",
+                "82e2cdc6693737c5998445b31f69668fa0da77c7705121053f6508ac84961123",
+            ),
+            ("17", "linux-x64"): (
+                "17.0.20.1+1",
+                "jdk-17.0.20.1+1-jre",
+                "0b2b640e3046b64c8ec504de0ab9d91bb5610182bda21fad454681ce54d45a62",
+            ),
+            ("17", "windows-x64"): (
+                "17.0.20.1+1",
+                "jdk-17.0.20.1+1-jre",
+                "bc21a93923103cdaac93ee337b0ae4365e739fde36df823dd456bc67c8a9d352",
+            ),
+            ("21", "linux-x64"): (
+                "21.0.12.1+1",
+                "jdk-21.0.12.1+1-jre",
+                "2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500",
+            ),
+            ("21", "windows-x64"): (
+                "21.0.12.1+1",
+                "jdk-21.0.12.1+1-jre",
+                "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636",
+            ),
+        }
+        self.assertEqual(set(pins), set(package_release.JAVA_VERSIONS))
+        for (java_version, platform), values in expected.items():
+            pin = pins[java_version][platform]
+            self.assertEqual(
+                (pin["javaVersion"], pin["archiveRoot"], pin["sha256"]), values
+            )
+            self.assertIn(pin["archive"], pin["url"])
+
+    def test_all_java_versions_and_platforms_have_versioned_names_and_manifest_identity(self) -> None:
+        for java_version in package_release.JAVA_VERSIONS:
+            for platform in package_release.PLATFORMS:
+                with self.subTest(java_version=java_version, platform=platform):
+                    suffix = ".zip" if platform == "windows-x64" else ".tar.gz"
+                    runtime = self.base / f"runtime-java{java_version}-{platform}{suffix}"
+                    if platform == "windows-x64":
+                        make_windows_runtime(runtime, java_version=java_version)
+                    else:
+                        make_linux_runtime(runtime, java_version=java_version)
+                    self.fixture.set_pin(platform, runtime, java_version)
+                    result = self.fixture.package(platform, runtime, java_version=java_version)
+                    root = f"ocelot-harness-0.1.0-{platform}-java{java_version}"
+                    self.assertEqual(result.name, root + suffix)
+
+                    if platform == "windows-x64":
+                        with zipfile.ZipFile(result) as archive:
+                            manifest = json.loads(
+                                archive.read(f"{root}/RELEASE-MANIFEST.json")
+                            )
+                    else:
+                        with tarfile.open(result, "r:gz") as archive:
+                            stream = archive.extractfile(f"{root}/RELEASE-MANIFEST.json")
+                            assert stream is not None
+                            manifest = json.load(stream)
+                    self.assertEqual(manifest["platform"], platform)
+                    self.assertEqual(manifest["source"]["commit"], SOURCE_COMMIT)
+                    self.assertEqual(
+                        manifest["source"]["ocelotBrainCommit"], BRAIN_COMMIT
+                    )
+                    self.assertEqual(manifest["runtime"]["javaMajor"], java_version)
+                    self.assertEqual(
+                        manifest["runtime"]["javaVersion"],
+                        FIXTURE_JAVA_VERSIONS[java_version],
+                    )
+                    self.assertEqual(
+                        manifest["runtime"]["archiveRoot"], RUNTIME_ROOTS[java_version]
+                    )
+                    self.assertEqual(
+                        manifest["runtime"]["sha256"],
+                        hashlib.sha256(runtime.read_bytes()).hexdigest(),
+                    )
+
+    def test_cli_defaults_to_java_21(self) -> None:
+        options = package_release._parse_arguments(
+            [
+                "--platform",
+                "linux-x64",
+                "--runtime-archive",
+                "runtime.tar.gz",
+                "--output",
+                "output",
+            ]
         )
-        self.assertEqual(
-            pins["windows-x64"]["sha256"],
-            "82e2cdc6693737c5998445b31f69668fa0da77c7705121053f6508ac84961123",
-        )
-        self.assertEqual(pins["linux-x64"]["archiveRoot"], RUNTIME_ROOT)
-        self.assertEqual(pins["windows-x64"]["archiveRoot"], RUNTIME_ROOT)
+        self.assertEqual(options.java_version, "21")
+
+    def test_wrong_java_major_and_platform_runtime_archives_are_rejected(self) -> None:
+        java8_linux = self.base / "java8-linux.tar.gz"
+        java17_linux = self.base / "java17-linux.tar.gz"
+        java17_windows = self.base / "java17-windows.zip"
+        make_linux_runtime(java8_linux, java_version="8")
+        make_linux_runtime(java17_linux, java_version="17")
+        make_windows_runtime(java17_windows, java_version="17")
+        self.fixture.set_pin("linux-x64", java8_linux, "8")
+        self.fixture.set_pin("linux-x64", java17_linux, "17")
+        self.fixture.set_pin("windows-x64", java17_windows, "17")
+
+        with self.assertRaisesRegex(package_release.PackagingError, "SHA-256 mismatch"):
+            self.fixture.package("linux-x64", java8_linux, java_version="17")
+        with self.assertRaisesRegex(package_release.PackagingError, "SHA-256 mismatch"):
+            self.fixture.package("windows-x64", java17_linux, java_version="17")
+
+        pins_path = self.fixture.repository / "project/runtime-distributions.json"
+        pins = json.loads(pins_path.read_text(encoding="utf-8"))
+        pins["runtimes"]["17"]["windows-x64"]["javaVersion"] = "21.0.0+wrong"
+        pins_path.write_text(json.dumps(pins), encoding="utf-8")
+        with self.assertRaisesRegex(package_release.PackagingError, "different Java major"):
+            self.fixture.package("windows-x64", java17_windows, java_version="17")
 
     def test_linux_archive_has_expected_allowlisted_layout_notices_modes_and_links(self) -> None:
         runtime = self.base / "runtime.tar.gz"
         make_linux_runtime(runtime)
         self.fixture.set_pin("linux-x64", runtime)
         result = self.fixture.package("linux-x64", runtime)
-        root = "ocelot-harness-0.1.0-linux-x64"
+        root = "ocelot-harness-0.1.0-linux-x64-java21"
 
         with tarfile.open(result, "r:gz") as archive:
             members = {member.name.rstrip("/"): member for member in archive.getmembers()}
@@ -254,7 +418,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         result = self.fixture.package("windows-x64", runtime)
-        root = "ocelot-harness-0.1.0-windows-x64"
+        root = "ocelot-harness-0.1.0-windows-x64-java21"
 
         with zipfile.ZipFile(result) as archive:
             names = set(archive.namelist())
@@ -276,7 +440,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         result = self.fixture.package("windows-x64", runtime)
-        root = "ocelot-harness-0.1.0-windows-x64"
+        root = "ocelot-harness-0.1.0-windows-x64-java21"
 
         self.assertEqual(
             list(self.fixture.output.glob(".ocelot-release-stage-*")),
@@ -316,7 +480,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.fixture.set_pin("linux-x64", runtime)
         pins_path = self.fixture.repository / "project/runtime-distributions.json"
         pins = json.loads(pins_path.read_text(encoding="utf-8"))
-        pins["runtimes"]["linux-x64"]["sha256"] = "0" * 64
+        pins["runtimes"]["21"]["linux-x64"]["sha256"] = "0" * 64
         pins_path.write_text(json.dumps(pins), encoding="utf-8")
 
         with self.assertRaisesRegex(package_release.PackagingError, "SHA-256 mismatch"):
@@ -367,7 +531,7 @@ class PackageReleaseTests(unittest.TestCase):
         make_windows_runtime(runtime)
         self.fixture.set_pin("windows-x64", runtime)
         self.fixture.output.mkdir()
-        unrelated = self.fixture.output / "ocelot-harness-0.1.0-windows-x64.zip"
+        unrelated = self.fixture.output / "ocelot-harness-0.1.0-windows-x64-java21.zip"
         unrelated.write_bytes(b"do not overwrite")
         with self.assertRaisesRegex(package_release.PackagingError, "refusing to overwrite"):
             self.fixture.package("windows-x64", runtime)

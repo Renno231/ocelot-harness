@@ -1,12 +1,12 @@
 # Ocelot Harness 0.1.0 dependency report
 
-Generated from `harnessApp/dependencyTree` for the assembled runtime on 2026-08-29. Test-only dependencies are listed separately and are not packaged.
+Generated from `harnessApp/dependencyTree` for the assembled runtime on 2026-09-29. Test-only dependencies are listed separately and are not packaged.
 
 ## Runtime graph
 
 | Component | Version | Origin | License |
 |---|---:|---|---|
-| Scala library | 2.13.10 | Maven Central | Apache-2.0 |
+| Scala library | 2.13.16 | Maven Central | Apache-2.0 |
 | ocelot-brain | 0.24.2 / `bec1cc6b1e9e588692f753e9c617063c74967fed` | pinned source submodule | MIT; retained resources also carry MIT/CC0-1.0/OFL-1.1 notices |
 | Typesafe Config | 1.4.4 | Maven Central | Apache-2.0 |
 | ujson | 3.3.1 | Maven Central | MIT |

@@ -12,9 +12,9 @@ Open a design discussion before changing a manifest or protocol contract, wideni
 
 ## Development baseline
 
-- Java 8
-- Scala 2.13.10
-- SBT 1.8.3
+- Java 8, 17 or 21 JDK
+- Scala 2.13.16
+- SBT 1.10.11
 - Python 3.10+ for launcher and release-packaging checks
 - initialized `lib/ocelot-brain` submodule at the recorded commit
 
@@ -101,13 +101,13 @@ An ocelot-brain update must be a dedicated change. Keep the submodule unmodified
 Run canonical verification from a clean committed checkout. The application JAR must report that exact commit and a clean source tree. Download the platform JRE archive specified by `project/runtime-distributions.json`, then run:
 
 ```text
-python scripts/package_release.py --platform windows-x64 --runtime-archive PATH_TO_JRE.zip --output dist
-python scripts/package_release.py --platform linux-x64 --runtime-archive PATH_TO_JRE.tar.gz --output dist
+python scripts/package_release.py --platform windows-x64 --java-version 21 --runtime-archive PATH_TO_JRE.zip --output dist
+python scripts/package_release.py --platform linux-x64 --java-version 21 --runtime-archive PATH_TO_JRE.tar.gz --output dist
 ```
 
-The offline packager checks the pinned runtime hash before extraction, copies only allowlisted product files, and writes an archive, payload manifest and SHA-256 sidecar. Repeat packaging with unchanged inputs under the same Python/zlib implementation produces identical bytes. Compression bytes across different zlib implementations are not guaranteed identical.
+Repeat with `--java-version 8` and `--java-version 17` and their matching pinned archives to produce all six editions. Java 21 is the default. The offline packager checks the pinned runtime hash before extraction, copies only allowlisted product files, and writes an archive, payload manifest and SHA-256 sidecar. Repeat packaging with unchanged inputs under the same Python/zlib implementation produces identical bytes. Compression bytes across different zlib implementations are not guaranteed identical.
 
-Before publication, test both extracted packages using their bundled runtimes, including real-brain boot, screen input/capture, daemon shutdown and the viewer entrypoint. Retain full runtime legal files and supply the matching upstream Temurin source archive and checksum beside the downloads. Keep raw verification logs, local projects and diagnostic artifacts outside the published source and release assets.
+Before publication, run canonical verification on Windows and Linux with each supported JDK, then test all six extracted packages using their bundled runtimes, including real-brain boot, screen input/capture, daemon shutdown and the viewer entrypoint. Retain full runtime legal files and supply the three matching upstream Temurin source archives and checksums beside the downloads. Keep raw verification logs, local projects and diagnostic artifacts outside the published source and release assets.
 
 ## Documentation
 

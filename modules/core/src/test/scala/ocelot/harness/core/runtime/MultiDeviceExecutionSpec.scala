@@ -174,8 +174,8 @@ private[runtime] object MultiDeviceExecutionProbe extends EitherValues with Matc
       val topology = HardwareCatalog.construct(project, workspace)
       val alpha = topology.computers(alphaId)
       val beta = topology.computers(betaId)
-      val alphaCard = alpha.inventory.entities.collectFirst { case value: NetworkCard => value }.get
-      val betaCard = beta.inventory.entities.collectFirst { case value: NetworkCard => value }.get
+      val alphaCard = alpha.inventory.entities.collectFirst { case card: NetworkCard => card }.get
+      val betaCard = beta.inventory.entities.collectFirst { case card: NetworkCard => card }.get
       (alphaCard.node.network eq betaCard.node.network) shouldBe true
       val observer = new PacketObserver
       beta.connect(observer)

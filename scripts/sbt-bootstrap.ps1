@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$sbtVersion = '1.8.3'
-$launcherSha256 = 'be5b810207403aece1449ce19b979c9c4cb36ea42e2e75b282464822535410da'
+$sbtVersion = '1.10.11'
+$launcherSha256 = 'e988d533a020e5b60ec22c3b5df4cd3e3df465f4fdc3951c63036e21483978e4'
 $launcherUrl = if ($env:SBT_LAUNCHER_URL) {
     $env:SBT_LAUNCHER_URL
 } else {

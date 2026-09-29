@@ -11,13 +11,13 @@ project manifest + host files
 
 ## Downloads
 
-[Download Ocelot Harness for Windows x64 or Linux x64](https://github.com/Renno231/ocelot-harness/releases/latest). The platform archives include Java 8: **no Java installation, SBT build or system PATH change is needed**. Java 21 can remain your system default.
+[Download Ocelot Harness for Windows x64 or Linux x64](https://github.com/Renno231/ocelot-harness/releases/latest). Choose a **Java 21, Java 17 or Java 8** edition. Each platform archive includes its named Java runtime: **no Java installation, SBT build or system PATH change is needed**. Java 21 is the recommended edition.
 
 Extract the complete archive and follow the [download quick start](docs/downloads.md). Source-checkout commands below use `scripts/`; downloads provide the same commands under `bin/`.
 
 ## Status
 
-Phase 1 and the workspace/runtime expansion are implemented. The harness provides reproducible Java 8/SBT builds, sole process-global lifecycle ownership, compatible Ocelot Desktop import, deterministic schema-v2 workspace authoring, serialized interactive execution, daemon-owned continuous simulation time, deterministic artifacts and recovery, versioned external control, live viewing, multi-device coverage, and release evidence on Windows and Linux.
+Phase 1 and the workspace/runtime expansion are implemented. The harness provides reproducible builds on Java 8, 17 and 21, sole process-global lifecycle ownership, compatible Ocelot Desktop import, deterministic schema-v2 workspace authoring, serialized interactive execution, daemon-owned continuous simulation time, deterministic artifacts and recovery, versioned external control, live viewing, multi-device coverage, and release evidence on Windows and Linux.
 
 Start here:
 
@@ -69,15 +69,15 @@ The optional viewer renders and controls emulated screens only. Ocelot Desktop c
 
 | Tool | Baseline |
 |---|---|
-| Java | 8; bundled in downloads, JDK required for source development |
-| Scala | 2.13.10 |
-| SBT | 1.8.3 |
+| Java | 8, 17 or 21; bundled in downloads, JDK required for source development |
+| Scala | 2.13.16 |
+| SBT | 1.10.11 |
 | Python | 3.10+ for developer packaging/launcher checks; not needed by downloads |
 | ocelot-brain | pinned submodule at `bec1cc6b1e9e588692f753e9c617063c74967fed` |
 
 ## Build and verification
 
-These steps are for source development, not for running a download. Select a Java 8 JDK using `JAVA_HOME` or set `OCELOT_JAVA` to its Java executable. Both the build wrappers and application launchers honor these settings directly; you do not need to replace another Java version on PATH. Java 21 build/runtime compatibility remains unverified.
+These steps are for source development, not for running a download. Select a Java 8, 17 or 21 JDK using `JAVA_HOME` or set `OCELOT_JAVA` to its Java executable. Both the build wrappers and application launchers honor these settings directly; you do not need to replace another Java version on PATH. The application retains Java 8-compatible bytecode and runs on all three supported versions.
 
 Initialize the pinned dependency after cloning:
 

@@ -9,8 +9,10 @@ Ocelot Harness must call ocelot-brain entity, workspace, input, event, and persi
 
 ## Decision
 
-- Implement Ocelot Harness in Scala 2.13.10 with SBT 1.8.3.
-- Use Java 8 as the initial compatibility baseline.
+- Build Ocelot Harness with Scala 2.13.16 and SBT 1.10.11.
+- Retain Java 8-compatible bytecode and support Java 8, 17 and 21 for source builds and application execution.
+- Apply the Scala compiler version to the pinned brain build through root-build settings, without modifying its source or recorded submodule commit.
+- Provide Windows/Linux x64 downloads with each supported Java runtime bundled; Java 21 is the default edition.
 - Add `lib/ocelot-brain` as a Git submodule pinned to commit `bec1cc6b1e9e588692f753e9c617063c74967fed`.
 - Reference the submodule as an SBT project dependency.
 - Keep the pinned upstream source unmodified.
@@ -24,9 +26,13 @@ Ocelot Harness must call ocelot-brain entity, workspace, input, event, and persi
 - Clones must initialize submodules.
 - CI must fetch submodules and use a compatible JDK/SBT toolchain.
 - A required brain fix triggers a separate decision: contribute upstream or pin a documented fork commit.
-- Java versions newer than 8 may be added to the test matrix after the baseline spike passes; they do not replace the baseline without a compatibility decision.
+- Release verification covers Java 8, 17 and 21 on Windows/Linux. Other Java major versions require their own compatibility evidence before support is claimed.
 
-## Verification
+## Java 17/21 build compatibility
+
+The original SBT 1.8.3 bootstrap uses Scala 2.12.17, which fails parsing Java 21 class files before loading the project (`bad constant pool index`). SBT 1.10.11 and Scala 2.13.16 provide the supported compiler path while retaining the Scala 2.13 binary family, Java 8 bytecode target and unchanged brain pin. Platform release verification separately covers source compilation and execution of the extracted downloads on their actual bundled runtimes.
+
+## Initial baseline verification
 
 The build foundation proved:
 

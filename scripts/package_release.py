@@ -27,6 +27,8 @@ from typing import Iterable, Mapping, Sequence
 
 
 DEFAULT_VERSION = "0.1.0"
+DEFAULT_JAVA_VERSION = "21"
+JAVA_VERSIONS = ("8", "17", "21")
 PLATFORMS = ("windows-x64", "linux-x64")
 MAX_RUNTIME_FILES = 10_000
 MAX_RUNTIME_BYTES = 1_000_000_000
@@ -78,6 +80,7 @@ class PackagingError(RuntimeError):
 @dataclass(frozen=True)
 class RuntimePin:
     platform: str
+    java_major: str
     distribution: str
     implementation: str
     java_version: str
@@ -145,18 +148,19 @@ def _validate_member_graph(paths: Iterable[PurePosixPath], symlink_paths: set[Pu
                 raise PackagingError(f"runtime archive entry descends through symlink: {path}")
 
 
-def _load_runtime_pin(repository_root: Path, platform: str) -> RuntimePin:
+def _load_runtime_pin(repository_root: Path, platform: str, java_version: str) -> RuntimePin:
     pins_path = repository_root / "project" / "runtime-distributions.json"
     try:
         data = json.loads(pins_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise PackagingError(f"cannot read runtime pins from {pins_path}: {error}") from error
-    if data.get("schemaVersion") != 1 or not isinstance(data.get("runtimes"), dict):
+    if data.get("schemaVersion") != 2 or not isinstance(data.get("runtimes"), dict):
         raise PackagingError("unsupported runtime-distributions.json schema")
     try:
-        item = data["runtimes"][platform]
+        item = data["runtimes"][java_version][platform]
         pin = RuntimePin(
             platform=platform,
+            java_major=java_version,
             distribution=item["distribution"],
             implementation=item["implementation"],
             java_version=item["javaVersion"],
@@ -166,11 +170,21 @@ def _load_runtime_pin(repository_root: Path, platform: str) -> RuntimePin:
             sha256=item["sha256"].lower(),
         )
     except (KeyError, TypeError, AttributeError) as error:
-        raise PackagingError(f"runtime pin for {platform} is incomplete") from error
+        raise PackagingError(
+            f"runtime pin for Java {java_version} on {platform} is incomplete"
+        ) from error
     if not re.fullmatch(r"[0-9a-f]{64}", pin.sha256):
-        raise PackagingError(f"runtime pin for {platform} has an invalid SHA-256")
+        raise PackagingError(
+            f"runtime pin for Java {java_version} on {platform} has an invalid SHA-256"
+        )
     if len(_safe_archive_parts(pin.archive_root)) != 1:
-        raise PackagingError(f"runtime pin for {platform} has an invalid archive root")
+        raise PackagingError(
+            f"runtime pin for Java {java_version} on {platform} has an invalid archive root"
+        )
+    if not re.match(rf"^{re.escape(java_version)}(?:[u.]|$)", pin.java_version):
+        raise PackagingError(
+            f"runtime pin for Java {java_version} on {platform} identifies a different Java major"
+        )
     return pin
 
 
@@ -455,8 +469,10 @@ def _write_manifest(
         "runtime": {
             "distribution": pin.distribution,
             "implementation": pin.implementation,
+            "javaMajor": pin.java_major,
             "javaVersion": pin.java_version,
             "archive": pin.archive,
+            "archiveRoot": pin.archive_root,
             "url": pin.url,
             "sha256": pin.sha256,
         },
@@ -619,6 +635,7 @@ def package_release(
     output_dir: Path,
     jar_path: Path | None = None,
     version: str = DEFAULT_VERSION,
+    java_version: str = DEFAULT_JAVA_VERSION,
     source_commit: str | None = None,
     brain_commit: str | None = None,
 ) -> Path:
@@ -632,9 +649,11 @@ def package_release(
     output_dir = Path(output_dir)
     if platform not in PLATFORMS:
         raise PackagingError(f"unsupported platform: {platform}")
+    if java_version not in JAVA_VERSIONS:
+        raise PackagingError(f"unsupported Java version: {java_version}")
     if not SAFE_VERSION.fullmatch(version):
         raise PackagingError(f"invalid release version: {version!r}")
-    pin = _load_runtime_pin(repository_root, platform)
+    pin = _load_runtime_pin(repository_root, platform, java_version)
 
     identities_from_repository = source_commit is None and brain_commit is None
     if identities_from_repository:
@@ -658,7 +677,7 @@ def package_release(
         raise PackagingError(f"output is not a directory: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    basename = f"ocelot-harness-{version}-{platform}"
+    basename = f"ocelot-harness-{version}-{platform}-java{java_version}"
     extension = ".zip" if platform == "windows-x64" else ".tar.gz"
     archive = output_dir / f"{basename}{extension}"
     sidecar = output_dir / f"{archive.name}.sha256"
@@ -718,6 +737,9 @@ def _parse_arguments(arguments: Sequence[str] | None) -> argparse.Namespace:
         description="Create an offline Ocelot Harness release from a verified pinned JRE archive."
     )
     parser.add_argument("--platform", required=True, choices=PLATFORMS)
+    parser.add_argument(
+        "--java-version", choices=JAVA_VERSIONS, default=DEFAULT_JAVA_VERSION
+    )
     parser.add_argument("--runtime-archive", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--jar", type=Path)
@@ -736,6 +758,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             output_dir=options.output,
             jar_path=options.jar,
             version=options.version,
+            java_version=options.java_version,
         )
     except PackagingError as error:
         print(f"ERROR: {error}", file=sys.stderr)

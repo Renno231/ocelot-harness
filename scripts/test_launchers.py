@@ -1,4 +1,4 @@
-"""Launcher contracts against the assembled application; requires a Java 8 installation."""
+"""Launcher contracts against the assembled application; requires a supported Java installation."""
 import os
 from pathlib import Path
 import shutil
@@ -28,7 +28,7 @@ class Launchers(unittest.TestCase):
         fake = self.base / 'fake path'
         fake.mkdir()
         self.fake = fake / ('java.cmd' if WINDOWS else 'java')
-        self.fake.write_text('@echo off\necho openjdk version "21.0.1" 1>&2\nexit /b 0\n' if WINDOWS else '#!/bin/sh\necho \'openjdk version "21.0.1"\' >&2\nexit 0\n')
+        self.fake.write_text('@echo off\necho openjdk version "1.7.0" 1>&2\nexit /b 0\n' if WINDOWS else '#!/bin/sh\necho \'openjdk version "1.7.0"\' >&2\nexit 0\n')
         self.fake.chmod(0o755)
         self.env = dict(os.environ)
         for key in ('JAVA_HOME', 'OCELOT_JAVA', 'JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS'):
@@ -40,7 +40,7 @@ class Launchers(unittest.TestCase):
         command = ['cmd.exe', '/d', '/c', 'call', str(script), *args] if WINDOWS else ['sh', str(script), *args]
         return subprocess.run(command, env=self.env, cwd=self.base, capture_output=True, text=True, timeout=30)
 
-    def test_java_home_overrides_path_java21(self):
+    def test_java_home_overrides_unsupported_path_java(self):
         self.env['JAVA_HOME'] = str(JAVA_HOME)
         p = self.run_cli('--help')
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -61,12 +61,24 @@ class Launchers(unittest.TestCase):
         self.env.update(OCELOT_JAVA=str(self.fake), JAVA_HOME=str(JAVA_HOME))
         p = self.run_cli('--help')
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn('Java 8 is required', p.stderr)
+        self.assertIn('Java 8 or newer is required', p.stderr)
 
-    def test_path_java21_is_rejected(self):
+    def test_unsupported_path_java_is_rejected(self):
         p = self.run_cli('--help')
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn('Java 8 is required', p.stderr)
+        self.assertIn('Java 8 or newer is required', p.stderr)
+
+    def test_supported_versions_reach_application_and_preserve_exit(self):
+        for version in ('1.8.0_504', '17.0.20.1', '21.0.12.1', '25'):
+            with self.subTest(version=version):
+                if WINDOWS:
+                    body = f'@echo off\nif "%~1"=="-version" (\necho openjdk version "{version}" 1>&2\nexit /b 0\n)\nexit /b 37\n'
+                else:
+                    body = f'#!/bin/sh\nif [ "$1" = "-version" ]; then\necho \'openjdk version "{version}"\' >&2\nexit 0\nfi\nexit 37\n'
+                self.fake.write_text(body)
+                self.env['OCELOT_JAVA'] = str(self.fake)
+                p = self.run_cli('--help')
+                self.assertEqual(p.returncode, 37, p.stderr)
 
     def test_bundled_runtime_precedes_java_home_and_path(self):
         runtime = self.root / 'runtime'

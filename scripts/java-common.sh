@@ -19,19 +19,20 @@ ocelot_select_java() {
     ocelot_java="$ocelot_java.exe"
   fi
   if [ ! -x "$ocelot_java" ]; then
-    printf 'ERROR: Java 8 is required; invalid Java executable selected through %s: %s\n' "$ocelot_java_source" "$ocelot_java" >&2
+    printf 'ERROR: Java 8 or newer is required; invalid Java executable selected through %s: %s\n' "$ocelot_java_source" "$ocelot_java" >&2
     return 1
   fi
   ocelot_java_version=$("$ocelot_java" -version 2>&1) || {
-    printf 'ERROR: Java 8 is required; selected java -version failed: %s\n' "$ocelot_java" >&2
+    printf 'ERROR: Java 8 or newer is required; selected java -version failed: %s\n' "$ocelot_java" >&2
     return 1
   }
-  case "$ocelot_java_version" in
-    *'version "1.8.'*) ;;
-    *)
-      printf 'ERROR: Java 8 is required for this release; selected through %s: %s\n' "$ocelot_java_source" "$ocelot_java" >&2
-      printf '%s\n' "$ocelot_java_version" 'Use the bundled download, set JAVA_HOME to Java 8, or set OCELOT_JAVA to its java executable. Java 21 is not yet supported.' >&2
-      return 1
-      ;;
-  esac
+  ocelot_java_major=$(printf '%s\n' "$ocelot_java_version" | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -n 1)
+  if [ "$ocelot_java_major" = 1 ]; then
+    ocelot_java_major=$(printf '%s\n' "$ocelot_java_version" | sed -n 's/.*version "1\.\([0-9][0-9]*\).*/\1/p' | head -n 1)
+  fi
+  if [ -z "$ocelot_java_major" ] || [ "$ocelot_java_major" -lt 8 ]; then
+    printf 'ERROR: Java 8 or newer is required; selected through %s: %s\n' "$ocelot_java_source" "$ocelot_java" >&2
+    printf '%s\n' "$ocelot_java_version" 'Use a bundled download, JAVA_HOME or OCELOT_JAVA. Verified Java versions are documented in the download guide.' >&2
+    return 1
+  fi
 }

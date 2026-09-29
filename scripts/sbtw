@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-sbt_version=1.8.3
-launcher_sha256=be5b810207403aece1449ce19b979c9c4cb36ea42e2e75b282464822535410da
+sbt_version=1.10.11
+launcher_sha256=e988d533a020e5b60ec22c3b5df4cd3e3df465f4fdc3951c63036e21483978e4
 launcher_url=${SBT_LAUNCHER_URL:-https://repo.maven.apache.org/maven2/org/scala-sbt/sbt-launch/$sbt_version/sbt-launch-$sbt_version.jar}
 cache_root=${SBT_BOOTSTRAP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ocelot-harness/sbt}
 launcher="$cache_root/sbt-launch-$sbt_version.jar"

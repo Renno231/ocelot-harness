@@ -14,7 +14,7 @@
     }
   },
   "components": [
-    { "type": "library", "bom-ref": "pkg:maven/org.scala-lang/scala-library@2.13.10", "group": "org.scala-lang", "name": "scala-library", "version": "2.13.10", "purl": "pkg:maven/org.scala-lang/scala-library@2.13.10" },
+    { "type": "library", "bom-ref": "pkg:maven/org.scala-lang/scala-library@2.13.16", "group": "org.scala-lang", "name": "scala-library", "version": "2.13.16", "purl": "pkg:maven/org.scala-lang/scala-library@2.13.16" },
     { "type": "framework", "bom-ref": "pkg:generic/ocelot-brain@0.24.2?commit=bec1cc6b1e9e588692f753e9c617063c74967fed", "name": "ocelot-brain", "version": "0.24.2", "licenses": [{ "license": { "id": "MIT" } }], "purl": "pkg:generic/ocelot-brain@0.24.2?commit=bec1cc6b1e9e588692f753e9c617063c74967fed" },
     { "type": "library", "bom-ref": "pkg:maven/com.typesafe/config@1.4.4", "group": "com.typesafe", "name": "config", "version": "1.4.4", "licenses": [{ "license": { "id": "Apache-2.0" } }], "purl": "pkg:maven/com.typesafe/config@1.4.4" },
     { "type": "library", "bom-ref": "pkg:maven/com.lihaoyi/ujson_2.13@3.3.1", "group": "com.lihaoyi", "name": "ujson_2.13", "version": "3.3.1", "licenses": [{ "license": { "id": "MIT" } }], "purl": "pkg:maven/com.lihaoyi/ujson_2.13@3.3.1" },

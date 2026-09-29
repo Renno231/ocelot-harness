@@ -3,9 +3,11 @@ import Keys._
 
 import scala.sys.process._
 
+val supportedScalaVersion = "2.13.16"
+
 ThisBuild / organization := "org.ocelot-harness"
 ThisBuild / version := "0.1.0"
-ThisBuild / scalaVersion := "2.13.10"
+ThisBuild / scalaVersion := supportedScalaVersion
 
 lazy val commonSettings = Seq(
   javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
@@ -52,6 +54,26 @@ lazy val releaseMetadataResources = Def.task {
 }
 
 lazy val ocelotBrain = RootProject(file("lib/ocelot-brain"))
+
+// The external build's explicit settings win initial loading, so reapply compatibility pins afterward.
+Global / onLoad := {
+  val previous = (Global / onLoad).value
+  state => {
+    val loaded = previous(state)
+    val extracted = Project.extract(loaded)
+    if (extracted.get(ocelotBrain / scalaVersion) == supportedScalaVersion) loaded
+    else {
+      extracted.appendWithSession(
+        Seq(
+          ocelotBrain / scalaVersion := supportedScalaVersion,
+          ocelotBrain / Compile / javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+          ocelotBrain / Compile / scalacOptions += "-release:8"
+        ),
+        loaded
+      )
+    }
+  }
+}
 
 lazy val harnessCore = (project in file("modules/core"))
   .dependsOn(ocelotBrain)

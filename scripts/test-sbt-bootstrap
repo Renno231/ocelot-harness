@@ -5,7 +5,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=${TMPDIR:-/tmp}/ocelot-harness-bootstrap-test-$$
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/cache"
-printf '%s\n' 'not the pinned launcher' > "$tmp/cache/sbt-launch-1.8.3.jar"
+printf '%s\n' 'not the pinned launcher' > "$tmp/cache/sbt-launch-1.10.11.jar"
 
 set +e
 output=$(
@@ -34,7 +34,7 @@ printf '%s\n' 'PASS: POSIX bootstrap rejects a launcher with the wrong checksum'
 mkdir -p "$tmp/fake-bin"
 cat > "$tmp/fake-bin/java" <<'EOF'
 #!/usr/bin/env sh
-printf '%s\n' 'openjdk version "17.0.10"' >&2
+printf '%s\n' 'openjdk version "1.7.0"' >&2
 exit 0
 EOF
 chmod +x "$tmp/fake-bin/java"
@@ -45,17 +45,17 @@ status=$?
 set -e
 
 if [ "$status" -eq 0 ]; then
-  printf '%s\n' 'FAIL: bootstrap accepted a non-Java-8 runtime' >&2
+  printf '%s\n' 'FAIL: bootstrap accepted an unsupported runtime' >&2
   exit 1
 fi
 
 case "$output" in
-  *"Java 8 is required"*) ;;
+  *"Java 8 or newer is required"*) ;;
   *)
-    printf '%s\n' 'FAIL: bootstrap did not report the Java 8 requirement' >&2
+    printf '%s\n' 'FAIL: bootstrap did not report the supported Java requirement' >&2
     printf '%s\n' "$output" >&2
     exit 1
     ;;
 esac
 
-printf '%s\n' 'PASS: POSIX bootstrap rejects a non-Java-8 runtime'
+printf '%s\n' 'PASS: POSIX bootstrap rejects an unsupported runtime'

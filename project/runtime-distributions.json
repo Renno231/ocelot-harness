@@ -1,23 +1,85 @@
 {
-  "schemaVersion": 1,
-  "runtimes": {
-    "linux-x64": {
-      "distribution": "Eclipse Temurin",
-      "implementation": "HotSpot",
-      "javaVersion": "8u504-b01",
-      "archive": "OpenJDK8U-jre_x64_linux_hotspot_8u504b01.tar.gz",
-      "archiveRoot": "jdk8u504-b01-jre",
-      "url": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jre_x64_linux_hotspot_8u504b01.tar.gz",
-      "sha256": "52dcd578baca1d3e449ea86768a9129c0ee04d7b22565695498353cc66940c61"
+  "schemaVersion": 2,
+  "sources": {
+    "8": {
+      "archive": "OpenJDK8U-jdk-sources_8u504b01.tar.gz",
+      "archiveRoot": "jdk8u504-b01-src",
+      "url": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jdk-sources_8u504b01.tar.gz",
+      "sha256": "86cd14f299616dddca13268cc2fa794eb4d28fc732dedaad8c5b8a3078e5d3c9"
     },
-    "windows-x64": {
-      "distribution": "Eclipse Temurin",
-      "implementation": "HotSpot",
-      "javaVersion": "8u504-b01",
-      "archive": "OpenJDK8U-jre_x64_windows_hotspot_8u504b01.zip",
-      "archiveRoot": "jdk8u504-b01-jre",
-      "url": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jre_x64_windows_hotspot_8u504b01.zip",
-      "sha256": "82e2cdc6693737c5998445b31f69668fa0da77c7705121053f6508ac84961123"
+    "17": {
+      "archive": "OpenJDK17U-jdk-sources_17.0.20.1_1.tar.gz",
+      "archiveRoot": "jdk-17.0.20.1+1-src",
+      "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk-sources_17.0.20.1_1.tar.gz",
+      "sha256": "21e2a065d244ab048e737f21af5d1fc74daaeb6707de36477ead8db1dca71214"
+    },
+    "21": {
+      "archive": "OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz",
+      "archiveRoot": "jdk-21.0.12.1+1-src",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz",
+      "sha256": "573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234"
+    }
+  },
+  "runtimes": {
+    "8": {
+      "linux-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "8u504-b01",
+        "archive": "OpenJDK8U-jre_x64_linux_hotspot_8u504b01.tar.gz",
+        "archiveRoot": "jdk8u504-b01-jre",
+        "url": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jre_x64_linux_hotspot_8u504b01.tar.gz",
+        "sha256": "52dcd578baca1d3e449ea86768a9129c0ee04d7b22565695498353cc66940c61"
+      },
+      "windows-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "8u504-b01",
+        "archive": "OpenJDK8U-jre_x64_windows_hotspot_8u504b01.zip",
+        "archiveRoot": "jdk8u504-b01-jre",
+        "url": "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jre_x64_windows_hotspot_8u504b01.zip",
+        "sha256": "82e2cdc6693737c5998445b31f69668fa0da77c7705121053f6508ac84961123"
+      }
+    },
+    "17": {
+      "linux-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "17.0.20.1+1",
+        "archive": "OpenJDK17U-jre_x64_linux_hotspot_17.0.20.1_1.tar.gz",
+        "archiveRoot": "jdk-17.0.20.1+1-jre",
+        "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jre_x64_linux_hotspot_17.0.20.1_1.tar.gz",
+        "sha256": "0b2b640e3046b64c8ec504de0ab9d91bb5610182bda21fad454681ce54d45a62"
+      },
+      "windows-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "17.0.20.1+1",
+        "archive": "OpenJDK17U-jre_x64_windows_hotspot_17.0.20.1_1.zip",
+        "archiveRoot": "jdk-17.0.20.1+1-jre",
+        "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jre_x64_windows_hotspot_17.0.20.1_1.zip",
+        "sha256": "bc21a93923103cdaac93ee337b0ae4365e739fde36df823dd456bc67c8a9d352"
+      }
+    },
+    "21": {
+      "linux-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "21.0.12.1+1",
+        "archive": "OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+        "archiveRoot": "jdk-21.0.12.1+1-jre",
+        "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+        "sha256": "2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500"
+      },
+      "windows-x64": {
+        "distribution": "Eclipse Temurin",
+        "implementation": "HotSpot",
+        "javaVersion": "21.0.12.1+1",
+        "archive": "OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip",
+        "archiveRoot": "jdk-21.0.12.1+1-jre",
+        "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip",
+        "sha256": "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636"
+      }
     }
   }
 }
