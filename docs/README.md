@@ -9,6 +9,7 @@ Use the current references for installation, project authoring, commands, and op
 - [Manifest schema v2](reference/manifest-v2.md)
 - [Ocelot Desktop workspace import](reference/desktop-import.md)
 - [Live screen viewer](reference/viewer.md)
+- [Showcase example](../examples/showcase/README.md)
 - [Two-computer example](../examples/two-computers/README.md)
 
 ## Design and maintenance
