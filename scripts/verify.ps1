@@ -45,7 +45,6 @@ try {
     $jarEntries = @(& $jarTool tf $assemblyJar)
     if ($LASTEXITCODE -ne 0 -or
         $jarEntries -notcontains 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md' -or
-        $jarEntries -notcontains 'META-INF/ocelot-harness/sbom.cdx.json' -or
         $jarEntries -notcontains 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt') {
         throw 'Packaged release metadata or license notices are incomplete'
     }

@@ -33,7 +33,6 @@ if [ ! -f "$assembly_jar" ]; then
 fi
 jar_entries=$("$jar_tool" tf "$assembly_jar" | tr -d '\r')
 printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/THIRD_PARTY_NOTICES.md'
-printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/sbom.cdx.json'
 printf '%s\n' "$jar_entries" | grep -Fxq 'META-INF/ocelot-harness/licenses/unifont-OFL-1.1.txt'
 printf '%s\n' 'PASS: packaged release metadata and license notices'
 

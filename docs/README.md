@@ -15,10 +15,7 @@ Use the current references for installation, project authoring, commands, and op
 
 - [Current architecture](architecture/phase-1.md)
 - [Architecture decisions](decisions/)
-- [Security policy](../SECURITY.md)
 - [Contributing](../CONTRIBUTING.md)
-- [Dependency report](release/dependencies.md)
-- [CycloneDX SBOM](release/sbom.cdx.json)
 - [Third-party notices](../THIRD_PARTY_NOTICES.md)
 
 ## Historical records

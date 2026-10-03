@@ -571,7 +571,7 @@ Every step has tick and wall-clock limits. A failure produces the diagnostic bun
 - create one fat executable JAR from `harness-app`
 - expose one canonical verification command that hosted CI can invoke without duplicating build policy
 
-First-party direct libraries are Typesafe Config 1.4.4 in `harness-core`, ujson 3.3.1 in `harness-app`, and ScalaTest 3.2.19 for tests. The dependency report and SBOM under `docs/release/` record the complete assembled graph and licenses.
+First-party direct libraries are Typesafe Config 1.4.4 in `harness-core`, ujson 3.3.1 in `harness-app`, and ScalaTest 3.2.19 for tests. Bundled library licenses are listed in `THIRD_PARTY_NOTICES.md`.
 
 ## Module quality assessment
 
