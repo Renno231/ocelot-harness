@@ -8,6 +8,12 @@ Run OpenComputers machines without Minecraft, and drive them from the command li
 
 Ocelot Harness wraps [ocelot-brain](https://gitlab.com/cc-ru/ocelot/ocelot-brain), the same emulator core behind Ocelot Desktop, in a headless daemon. You describe your computers in a project file (or import an existing Ocelot Desktop workspace), start them up, and then type, click, read the screen, take screenshots, and step the clock, all from a terminal. There's also a live viewer window if you want to watch.
 
+## Why?
+
+Ocelot Desktop is a great OC emulator, but it's built for a person at a mouse. There's no way to script it, run it headless, or let a program drive it. That means you can't write automated tests for OC software, and an AI agent can't write Lua, run it, look at the screen, and fix its own bugs.
+
+Ocelot Harness takes the same emulator core and gives it a remote control. Anything that can run a command can now boot a computer, type into it, and read back exactly what's on screen.
+
 It's handy for:
 
 - testing OC programs automatically instead of clicking through them by hand
