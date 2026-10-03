@@ -56,8 +56,6 @@ REFERENCE_DOCUMENTS = (
     "docs/reference/manifest-v2.md",
     "docs/reference/viewer.md",
     "docs/reference/desktop-import.md",
-    "docs/release/dependencies.md",
-    "docs/release/sbom.cdx.json",
 )
 EXAMPLE_FILES = (
     "examples/two-computers/README.md",

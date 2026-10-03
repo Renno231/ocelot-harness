@@ -25,41 +25,6 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
       OcelotCtl.ReferenceMarkdown
   }
 
-  test("release metadata records the packaged graph, notices, and security override") {
-    val roots = Vector(Paths.get("."), Paths.get("..", "..")).map(_.toAbsolutePath.normalize())
-    val root = roots
-      .find(path => Files.isRegularFile(path.resolve("build.sbt")))
-      .getOrElse(
-        fail("repository root is missing")
-      )
-    val sbom = ujson.read(
-      new String(
-        Files.readAllBytes(root.resolve("docs").resolve("release").resolve("sbom.cdx.json")),
-        StandardCharsets.UTF_8
-      )
-    )
-    sbom("bomFormat").str shouldBe "CycloneDX"
-    sbom("specVersion").str shouldBe "1.6"
-    val components =
-      sbom("components").arr.map(value => value("name").str -> value("version").str).toMap
-    components("ocelot-brain") shouldBe "0.24.2"
-    components("log4j-api") shouldBe "2.25.5"
-    components("log4j-core") shouldBe "2.25.5"
-
-    val notices = new String(
-      Files.readAllBytes(root.resolve("THIRD_PARTY_NOTICES.md")),
-      StandardCharsets.UTF_8
-    )
-    notices should include("LICENSE-unifont")
-    notices should include("LICENSE-oc")
-    val dependencies = new String(
-      Files.readAllBytes(root.resolve("docs").resolve("release").resolve("dependencies.md")),
-      StandardCharsets.UTF_8
-    )
-    dependencies should include("GHSA-qv9r-c865-cp47")
-    dependencies should include("no remaining advisories")
-  }
-
   test("CLI options reject unknown and duplicate flags") {
     OcelotCtl.run(
       Array("screen", "wait", "main", "--contains", "READY", "--typo", "1")

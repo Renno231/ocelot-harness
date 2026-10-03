@@ -22,6 +22,7 @@ lazy val commonSettings = Seq(
   Test / fork := true,
   Test / parallelExecution := false,
   scalafmtOnCompile := false,
+  // ocelot-brain resolves Log4j 2.25.1, which has known advisories; pin the fixed release.
   dependencyOverrides ++= Seq(
     "org.apache.logging.log4j" % "log4j-api" % "2.25.5",
     "org.apache.logging.log4j" % "log4j-core" % "2.25.5"
@@ -43,8 +44,6 @@ lazy val releaseMetadataResources = Def.task {
   val resources = Vector(
     repository / "LICENSE" -> (output / "licenses" / "ocelot-harness-MIT.txt"),
     repository / "THIRD_PARTY_NOTICES.md" -> (output / "THIRD_PARTY_NOTICES.md"),
-    repository / "docs" / "release" / "dependencies.md" -> (output / "dependencies.md"),
-    repository / "docs" / "release" / "sbom.cdx.json" -> (output / "sbom.cdx.json"),
     repository / "lib" / "ocelot-brain" / "LICENSE" -> (output / "licenses" / "ocelot-brain-MIT.txt"),
     repository / "lib" / "ocelot-brain" / "LICENSE-oc" -> (output / "licenses" / "OpenComputers-resources.txt"),
     repository / "lib" / "ocelot-brain" / "LICENSE-unifont" -> (output / "licenses" / "unifont-OFL-1.1.txt")

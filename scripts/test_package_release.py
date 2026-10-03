@@ -373,8 +373,6 @@ class PackageReleaseTests(unittest.TestCase):
                 f"{root}/docs/reference/manifest-v2.md",
                 f"{root}/docs/reference/viewer.md",
                 f"{root}/docs/reference/desktop-import.md",
-                f"{root}/docs/release/dependencies.md",
-                f"{root}/docs/release/sbom.cdx.json",
                 *(f"{root}/{name}" for name in package_release.EXAMPLE_FILES),
             }
             self.assertTrue(expected.issubset(members))

@@ -81,8 +81,6 @@ Expected failures use typed `HarnessError` values with stable codes. Unexpected 
 - Treat emulated programs and client input as untrusted.
 - Bound queues, events, ticks, wall time, captures, and artifacts.
 
-See [`SECURITY.md`](SECURITY.md).
-
 ## Dependency changes
 
 A dependency update includes:
