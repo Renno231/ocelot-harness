@@ -22,7 +22,8 @@ import ocelot.harness.core.workspace._
 private[app] final class JsonRpcEndpoint(
     session: HarnessSession,
     expectedToken: Option[String],
-    shutdown: () => Unit
+    shutdown: () => Unit,
+    runCancellation: RunCancellation = RunCancellation.create()
 ) {
   require(session != null, "session is required")
   require(expectedToken != null, "token policy is required")
@@ -128,7 +129,7 @@ private[app] final class JsonRpcEndpoint(
             maxTicks,
             timeoutMillis.millis,
             pace,
-            RunCancellation.create()
+            runCancellation
           )
         )
       )

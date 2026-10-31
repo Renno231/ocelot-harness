@@ -304,6 +304,89 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
     }
   }
 
+  test("daemon down cancels an in-flight wait and stops within its deadline") {
+    val workDirectory = Files.createTempDirectory("ocelot-harness-loopback-down-")
+    val projectDirectory = workDirectory.resolve("project")
+    copyTree(verticalFixture, projectDirectory)
+    val metadataPath = projectDirectory.resolve(".ocelot-harness/run/connection.json")
+    val executor = Executors.newSingleThreadExecutor()
+
+    try {
+      val up = runJava(
+        workDirectory,
+        "up",
+        "ocelot.harness.app.HarnessDaemon",
+        "up",
+        "--project",
+        projectDirectory.toString
+      )
+      withClue(up.output)(up.exitCode shouldBe 0)
+      runCtl(workDirectory, projectDirectory, "machine", "start", "main")
+
+      val connection = LoopbackConnection
+        .open(projectDirectory)
+        .fold(error => fail(error.message), identity)
+      val waiting =
+        try {
+          val pending = executor.submit(new Callable[Either[String, ujson.Value]] {
+            override def call(): Either[String, ujson.Value] =
+              connection
+                .call(
+                  "simulation.run",
+                  ujson.Obj(
+                    "condition" -> ujson.Obj(
+                      "type" -> "screen_contains",
+                      "screenId" -> "main",
+                      "text" -> "NEVER-APPEARS"
+                    ),
+                    "maxTicks" -> 10000000,
+                    "timeoutMillis" -> 60000
+                  )
+                )
+                .left
+                .map(_.message)
+          })
+
+          val down = runJava(
+            workDirectory,
+            "down",
+            "ocelot.harness.app.HarnessDaemon",
+            "down",
+            "--project",
+            projectDirectory.toString
+          )
+          withClue(down.output) {
+            down.exitCode shouldBe 0
+            down.output should include("stopped")
+          }
+          pending.get(15L, TimeUnit.SECONDS)
+        } finally connection.close()
+
+      val result = waiting.fold(message => fail(message), identity)
+      result("stopReason")("type").str shouldBe "cancelled"
+      java.lang.Long.parseLong(result("elapsedWallTimeMillis").str) should be < 30000L
+      eventually(10000L)(!Files.exists(metadataPath)) shouldBe true
+      val serviceLog = projectDirectory.resolve(".ocelot-harness/run/service.log")
+      if (Files.isRegularFile(serviceLog)) {
+        new String(Files.readAllBytes(serviceLog), StandardCharsets.UTF_8) should not include
+          "interrupted"
+      }
+    } finally {
+      executor.shutdownNow()
+      if (Files.exists(metadataPath)) {
+        runJava(
+          workDirectory,
+          "cleanup-down",
+          "ocelot.harness.app.HarnessDaemon",
+          "down",
+          "--project",
+          projectDirectory.toString
+        )
+      }
+      deleteRecursively(workDirectory)
+    }
+  }
+
   private def rawCall(port: Int, handshakeParams: ujson.Obj): ujson.Value = {
     val socket = new java.net.Socket("127.0.0.1", port)
     try {

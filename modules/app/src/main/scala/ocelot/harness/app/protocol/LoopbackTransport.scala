@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.util.control.NonFatal
 
 import ocelot.harness.core.BuildIdentity
-import ocelot.harness.core.workspace.HarnessSession
+import ocelot.harness.core.workspace.{HarnessSession, RunCancellation}
 
 private[app] final case class ConnectionMetadata(
     host: String,
@@ -345,6 +345,7 @@ private[app] object LoopbackServer {
     val address = InetAddress.getByName("127.0.0.1")
     val server = new ServerSocket()
     val running = new AtomicBoolean(true)
+    val stopping = RunCancellation.create()
     val executor = new ThreadPoolExecutor(
       4,
       4,
@@ -363,7 +364,8 @@ private[app] object LoopbackServer {
       while (running.get()) {
         try {
           val socket = server.accept()
-          try executor.execute(() => serveConnection(socket, session, lease.token, running))
+          try
+            executor.execute(() => serveConnection(socket, session, lease.token, running, stopping))
           catch {
             case NonFatal(_) => socket.close()
           }
@@ -372,6 +374,7 @@ private[app] object LoopbackServer {
         }
       }
     } finally {
+      stopping.cancel()
       try server.close()
       finally {
         executor.shutdown()
@@ -387,11 +390,20 @@ private[app] object LoopbackServer {
       socket: Socket,
       session: HarnessSession,
       token: String,
-      running: AtomicBoolean
+      running: AtomicBoolean,
+      stopping: RunCancellation
   ): Unit = {
     try {
       socket.setSoTimeout(30000)
-      val endpoint = new JsonRpcEndpoint(session, Some(token), () => running.set(false))
+      val endpoint = new JsonRpcEndpoint(
+        session,
+        Some(token),
+        () => {
+          running.set(false)
+          stopping.cancel()
+        },
+        stopping
+      )
       StdioTransport.serve(
         socket.getInputStream,
         socket.getOutputStream,
