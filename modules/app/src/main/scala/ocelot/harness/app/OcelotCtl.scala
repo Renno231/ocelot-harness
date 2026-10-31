@@ -291,6 +291,15 @@ object OcelotCtl {
             value => s"restored ${value("projectId").str}"
           )
         )
+      case Vector("media", "eject", id) =>
+        Right(
+          CliRequest(
+            "media.eject",
+            ujson.Obj("deviceId" -> id),
+            value =>
+              s"${value("deviceId").str}: ${if (value("ejected").bool) "ejected" else "empty"}"
+          )
+        )
       case Vector("diagnostics", "collect", tail @ _*) => diagnosticsRequest(tail.toVector)
       case _                                           => Left(usage)
     }
@@ -532,6 +541,7 @@ object OcelotCtl {
       |ocelotctl screen capture <screen-id> --format <png|text|cells-json> [--path <relative-path>] [--scale <n>]
       |ocelotctl snapshot save <name> [--host-disks <reference-only|copy>]
       |ocelotctl snapshot load <name>
+      |ocelotctl media eject <disk-drive-id>
       |ocelotctl diagnostics collect [--path <relative-path>]
       |```
       |

@@ -107,6 +107,23 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
     domain("error")("data")("harnessCode").str shouldBe "unknown_computer"
   }
 
+  test("media.eject names the drive and reports whether it held media") {
+    val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
+    response(
+      endpoint.handleLine(request(1, "harness.version", ujson.Obj("protocolMajor" -> 1)))
+    )
+
+    val ejected =
+      response(endpoint.handleLine(request(2, "media.eject", ujson.Obj("deviceId" -> "drive"))))
+    ejected("result") shouldBe ujson.Obj("deviceId" -> "drive", "ejected" -> true)
+    response(endpoint.handleLine(request(3, "media.eject")))("error")(
+      "code"
+    ).num.toInt shouldBe -32602
+    response(
+      endpoint.handleLine(request(4, "media.eject", ujson.Obj("deviceId" -> "missing")))
+    )("error")("data")("harnessCode").str shouldBe "unknown_drive"
+  }
+
   test("artifact methods return bounded metadata instead of inline bytes") {
     val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
     response(
@@ -330,6 +347,10 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
 
     override def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription] =
       Right(describe())
+
+    override def ejectMedia(driveId: String): Either[HarnessError, MediaEjectResult] =
+      if (driveId == "drive") Right(MediaEjectResult(driveId, ejected = true))
+      else Left(HarnessError.UnknownDrive(driveId))
 
     override def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle] =
       Right(

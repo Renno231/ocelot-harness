@@ -41,6 +41,7 @@ ocelotctl screen key-up <screen-id> <key> [--character <text>]
 ocelotctl screen capture <screen-id> --format <png|text|cells-json> [--path <relative-path>] [--scale <n>]
 ocelotctl snapshot save <name> [--host-disks <reference-only|copy>]
 ocelotctl snapshot load <name>
+ocelotctl media eject <disk-drive-id>
 ocelotctl diagnostics collect [--path <relative-path>]
 ```
 

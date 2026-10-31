@@ -69,10 +69,14 @@ private[app] final class JsonRpcEndpoint(
         case "simulation.status"  => domain(session.clockStatus()).map(JsonCodec.clock)
         case "screen.read" =>
           screenId(call.params).flatMap(id => domain(session.readScreen(id))).map(JsonCodec.screen)
-        case "screen.input"        => input(call.params)
-        case "screen.capture"      => capture(call.params)
-        case "snapshot.save"       => saveSnapshot(call.params)
-        case "snapshot.load"       => loadSnapshot(call.params)
+        case "screen.input"   => input(call.params)
+        case "screen.capture" => capture(call.params)
+        case "snapshot.save"  => saveSnapshot(call.params)
+        case "snapshot.load"  => loadSnapshot(call.params)
+        case "media.eject" =>
+          string(call.params, "deviceId")
+            .flatMap(id => domain(session.ejectMedia(id)))
+            .map(value => ujson.Obj("deviceId" -> value.driveId, "ejected" -> value.ejected))
         case "diagnostics.collect" => diagnostics(call.params)
         case "service.shutdown" =>
           shutdown()

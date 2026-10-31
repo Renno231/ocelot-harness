@@ -89,6 +89,8 @@ final case class WorkspaceDescription(
     deviceConnections: Vector[(String, String)] = Vector.empty
 )
 
+final case class MediaEjectResult(driveId: String, ejected: Boolean)
+
 trait HarnessSession extends AutoCloseable {
   def describe(): WorkspaceDescription
   def startMachine(id: ComputerId): Either[HarnessError, MachineStatus]
@@ -110,5 +112,6 @@ trait HarnessSession extends AutoCloseable {
   def recentEvents(): Either[HarnessError, EventSnapshot]
   def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription]
   def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription]
+  def ejectMedia(driveId: String): Either[HarnessError, MediaEjectResult]
   def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
 }

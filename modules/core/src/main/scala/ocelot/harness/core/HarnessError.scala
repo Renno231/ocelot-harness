@@ -52,6 +52,11 @@ object HarnessError {
     override val message: String = s"unknown screen: $id"
   }
 
+  final case class UnknownDrive(id: String) extends HarnessError {
+    override val code: String = "unknown_drive"
+    override val message: String = s"unknown disk drive: $id"
+  }
+
   final case class InvalidRunRequest(message: String) extends HarnessError {
     override val code: String = "invalid_run_request"
   }

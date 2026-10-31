@@ -8,7 +8,7 @@ import scala.collection.mutable.ArrayDeque
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import totoro.ocelot.brain.entity.Screen
+import totoro.ocelot.brain.entity.{FloppyDiskDrive, Screen}
 import totoro.ocelot.brain.entity.traits.{Computer, Entity, Inventory}
 import totoro.ocelot.brain.workspace.Workspace
 
@@ -52,6 +52,8 @@ private[runtime] final class BrainSession(
   private val eventBuffer =
     project.map(value => new SessionEventBuffer(value.runtime.limits.eventBufferSize))
   private var lastRunResult: Option[RunResult] = None
+  // A snapshot restores the manifest's media, so one saved without it could not load.
+  private var mediaEjected = false
   private val simulationClock = new SimulationClock(
     project.map(_.id.value).getOrElse("lifecycle-test"),
     project.map(_.runtime.tickRate).getOrElse(20),
@@ -168,6 +170,13 @@ private[runtime] final class BrainSession(
     command {
       withManualTickBarrier {
         for {
+          _ <- Either.cond(
+            !mediaEjected,
+            (),
+            SnapshotInvalid(
+              "a snapshot can't be saved after media is ejected; load a snapshot first"
+            )
+          )
           value <- project.toRight(SnapshotInvalid("snapshot storage is unavailable"))
           topology <- constructed.toRight(SnapshotInvalid("snapshot topology is unavailable"))
           description <- SnapshotStore.save(value, topology, workspace, brainVersion, request)
@@ -198,6 +207,7 @@ private[runtime] final class BrainSession(
                 constructed = Some(candidateTopology)
                 screenCapture = new ScreenCapture(candidate, revisionBase)
                 lastRunResult = None
+                mediaEjected = false
                 disposeWorkspace(previous)
                 Right(candidateTopology.description)
               }
@@ -210,6 +220,16 @@ private[runtime] final class BrainSession(
         }
       }
     }
+
+  override def ejectMedia(driveId: String): Either[HarnessError, MediaEjectResult] = command {
+    constructed.flatMap(value => Option(driveId).flatMap(value.deviceEntities.get)) match {
+      case Some(drive: FloppyDiskDrive) =>
+        val ejected = drive.eject()
+        if (ejected) mediaEjected = true
+        Right(MediaEjectResult(driveId, ejected))
+      case _ => Left(UnknownDrive(String.valueOf(driveId)))
+    }
+  }
 
   override def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle] =
     command {
