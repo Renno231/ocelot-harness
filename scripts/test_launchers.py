@@ -35,9 +35,9 @@ class Launchers(unittest.TestCase):
             self.env.pop(key, None)
         self.env['PATH'] = str(fake) + os.pathsep + self.env['PATH']
 
-    def run_cli(self, *args, launcher='ocelotctl'):
+    def run_cli(self, *args, launcher='ocelotctl', call=True):
         script = self.bin / (launcher + ('.cmd' if WINDOWS else ''))
-        command = ['cmd.exe', '/d', '/c', 'call', str(script), *args] if WINDOWS else ['sh', str(script), *args]
+        command = ['cmd.exe', '/d', '/c', *(['call'] if call else []), str(script), *args] if WINDOWS else ['sh', str(script), *args]
         return subprocess.run(command, env=self.env, cwd=self.base, capture_output=True, text=True, timeout=30)
 
     def test_java_home_overrides_unsupported_path_java(self):
@@ -81,6 +81,19 @@ class Launchers(unittest.TestCase):
                 self.env['OCELOT_JAVA'] = str(self.fake)
                 p = self.run_cli('--help')
                 self.assertEqual(p.returncode, 37, p.stderr)
+
+    def test_percent_signs_reach_the_application_unchanged(self):
+        if WINDOWS:
+            body = '@echo off\nif "%~1"=="-version" (\necho openjdk version "1.8.0_504" 1>&2\nexit /b 0\n)\necho %*\n'
+        else:
+            body = '#!/bin/sh\nif [ "$1" = "-version" ]; then\necho \'openjdk version "1.8.0_504"\' >&2\nexit 0\nfi\necho "$@"\n'
+        self.fake.write_text(body)
+        self.env['OCELOT_JAVA'] = str(self.fake)
+        for launcher in ('ocelotctl', 'ocelot-harnessd', 'ocelot-viewer'):
+            with self.subTest(launcher=launcher):
+                p = self.run_cli('screen', 'type', 'mill-%02d', launcher=launcher, call=False)
+                self.assertEqual(p.returncode, 0, p.stderr)
+                self.assertTrue(p.stdout.rstrip().endswith(' screen type mill-%02d'), p.stdout)
 
     def bundle_runtime(self):
         runtime = self.root / 'runtime'
