@@ -475,7 +475,9 @@ private[app] final class LoopbackConnection private (
       method: String,
       params: ujson.Obj
   ): Either[RpcClientFailure, ujson.Value] = {
+    val responseTimeoutMillis = LoopbackClient.responseTimeoutMillis(params)
     try {
+      socket.setSoTimeout(responseTimeoutMillis)
       val result = LoopbackClient.exchange(writer, reader, id, method, params)
       result match {
         case Left(error) if error.exitCode == AppExitCode.Connection => close()
@@ -483,6 +485,14 @@ private[app] final class LoopbackConnection private (
       }
       result
     } catch {
+      case _: SocketTimeoutException =>
+        close()
+        Left(
+          RpcClientFailure(
+            AppExitCode.Connection,
+            s"service did not respond within ${responseTimeoutMillis / 1000} seconds"
+          )
+        )
       case NonFatal(error) =>
         close()
         Left(
@@ -512,7 +522,7 @@ private[app] object LoopbackConnection {
     val socket = new Socket()
     try {
       socket.connect(new InetSocketAddress(metadata.host, metadata.port), 3000)
-      socket.setSoTimeout(30000)
+      socket.setSoTimeout(LoopbackClient.ResponseWindowMillis)
       val connection = new LoopbackConnection(
         socket,
         new BufferedWriter(new OutputStreamWriter(socket.getOutputStream, StandardCharsets.UTF_8)),
@@ -555,6 +565,16 @@ private[app] object LoopbackClient {
 
   def ping(projectRoot: Path): Either[RpcClientFailure, ujson.Value] =
     call(projectRoot, "workspace.describe")
+
+  private[protocol] val ResponseWindowMillis = 30000
+  private val MaxRequestWallMillis = 300000L
+
+  private[protocol] def responseTimeoutMillis(params: ujson.Obj): Int =
+    params.value.get("timeoutMillis") match {
+      case Some(ujson.Num(budget)) if budget > 0.0 =>
+        ResponseWindowMillis + math.min(budget, MaxRequestWallMillis.toDouble).toInt
+      case _ => ResponseWindowMillis
+    }
 
   private[protocol] def exchange(
       writer: BufferedWriter,

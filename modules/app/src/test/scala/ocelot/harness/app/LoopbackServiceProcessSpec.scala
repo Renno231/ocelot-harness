@@ -237,6 +237,73 @@ final class LoopbackServiceProcessSpec extends AnyFunSuite with Matchers {
     }
   }
 
+  test("CLI wait longer than the default response window returns its own timeout result") {
+    val workDirectory = Files.createTempDirectory("ocelot-harness-loopback-wait-")
+    val projectDirectory = workDirectory.resolve("project")
+    copyTree(verticalFixture, projectDirectory)
+    val metadataPath = projectDirectory.resolve(".ocelot-harness/run/connection.json")
+
+    try {
+      val up = runJava(
+        workDirectory,
+        "up",
+        "ocelot.harness.app.HarnessDaemon",
+        "up",
+        "--project",
+        projectDirectory.toString
+      )
+      withClue(up.output)(up.exitCode shouldBe 0)
+
+      runCtl(workDirectory, projectDirectory, "machine", "start", "main")
+      val waited = runCtl(
+        workDirectory,
+        projectDirectory,
+        "screen",
+        "wait",
+        "main",
+        "--contains",
+        "NEVER-APPEARS",
+        "--max-ticks",
+        "10000000",
+        "--timeout",
+        "31s"
+      )
+      waited("stopReason")("type").str shouldBe "condition_timed_out"
+      java.lang.Long.parseLong(waited("elapsedWallTimeMillis").str) should be >= 31000L
+
+      val down = runJava(
+        workDirectory,
+        "down",
+        "ocelot.harness.app.HarnessDaemon",
+        "down",
+        "--project",
+        projectDirectory.toString
+      )
+      withClue(down.output) {
+        down.exitCode shouldBe 0
+        down.output should include("stopped")
+      }
+      eventually(10000L)(!Files.exists(metadataPath)) shouldBe true
+      val serviceLog = projectDirectory.resolve(".ocelot-harness/run/service.log")
+      if (Files.isRegularFile(serviceLog)) {
+        new String(Files.readAllBytes(serviceLog), StandardCharsets.UTF_8) should not include
+          "interrupted"
+      }
+    } finally {
+      if (Files.exists(metadataPath)) {
+        runJava(
+          workDirectory,
+          "cleanup-down",
+          "ocelot.harness.app.HarnessDaemon",
+          "down",
+          "--project",
+          projectDirectory.toString
+        )
+      }
+      deleteRecursively(workDirectory)
+    }
+  }
+
   private def rawCall(port: Int, handshakeParams: ujson.Obj): ujson.Value = {
     val socket = new java.net.Socket("127.0.0.1", port)
     try {
