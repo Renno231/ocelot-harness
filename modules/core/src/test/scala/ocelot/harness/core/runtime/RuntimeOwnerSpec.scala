@@ -48,6 +48,26 @@ final class RuntimeOwnerSpec extends AnyFunSuite with Matchers with EitherValues
     }
   }
 
+  test("short waits take about what they ask for while the owner holds the runtime") {
+    assume(System.getProperty("os.name").toLowerCase.contains("win"), "Windows timer only")
+    withRuntimeConfig { config =>
+      def fineTimers = Thread.getAllStackTraces.keySet.asScala.count { thread =>
+        thread.getName == "ocelot-harness-fine-timer" && thread.isAlive
+      }
+      val owner = RuntimeOwner
+        .isolatedForTesting(new RecordingBrainLifecycle, new RecordingShutdownHooks)
+        .start(config)
+        .value
+      try {
+        val started = System.nanoTime()
+        (1 to 50).foreach(_ => java.util.concurrent.locks.LockSupport.parkNanos(1000000L))
+        (System.nanoTime() - started) / 50 / 1000000.0 should be < 5.0
+        fineTimers shouldBe 1
+      } finally owner.close()
+      fineTimers shouldBe 0
+    }
+  }
+
   test("closes the active empty session before global shutdown") {
     withRuntimeConfig { config =>
       val lifecycle = new RecordingBrainLifecycle

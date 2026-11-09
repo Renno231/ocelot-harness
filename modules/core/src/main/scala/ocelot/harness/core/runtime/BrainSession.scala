@@ -8,8 +8,10 @@ import scala.collection.mutable.ArrayDeque
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import totoro.ocelot.brain.entity.{FloppyDiskDrive, Screen}
+import totoro.ocelot.brain.entity.machine.MachineInternals
+import totoro.ocelot.brain.entity.{FloppyDiskDrive, Redstone, Screen}
 import totoro.ocelot.brain.entity.traits.{Computer, Entity, Inventory}
+import totoro.ocelot.brain.util.Direction
 import totoro.ocelot.brain.workspace.Workspace
 
 import ocelot.harness.core.HarnessError
@@ -230,6 +232,44 @@ private[runtime] final class BrainSession(
       case _ => Left(UnknownDrive(String.valueOf(driveId)))
     }
   }
+
+  // OC's side numbers 0-5, which are also brain's Direction ids.
+  private val RedstoneSides = Vector("bottom", "top", "back", "front", "right", "left")
+
+  // What a block next to the computer puts into its redstone card, as a DHD or lever would. A
+  // rise to the card's wake threshold starts a stopped computer, as in game.
+  override def setRedstoneInput(
+      id: ComputerId,
+      side: String,
+      value: Int
+  ): Either[HarnessError, RedstoneInputResult] = command {
+    for {
+      computer <- machine(id)
+      index <- redstoneSide(side).toRight(
+        InvalidInput(s"unknown side: $side (${RedstoneSides.mkString(", ")} or 0-5)")
+      )
+      _ <- Either.cond(
+        value >= 0 && value <= 15,
+        (),
+        InvalidInput(s"redstone input must be 0-15: $value")
+      )
+      card <- (computer match {
+        case inventory: Inventory =>
+          inventory.inventory.entities.collectFirst { case card: Redstone.Tier1 => card }
+        case _ => None
+      }).toRight(InvalidInput(s"${id.value} has no redstone card"))
+    } yield {
+      card.setRedstoneInput(Direction(index), value)
+      RedstoneInputResult(id.value, RedstoneSides(index), value)
+    }
+  }
+
+  private def redstoneSide(side: String): Option[Int] =
+    Option(side).flatMap { value =>
+      val named = RedstoneSides.indexOf(value.toLowerCase)
+      if (named >= 0) Some(named)
+      else value.toIntOption.filter(n => n >= 0 && n < RedstoneSides.size)
+    }
 
   override def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle] =
     command {
@@ -503,18 +543,27 @@ private[runtime] final class BrainSession(
       startedAt: Long,
       wallBudget: FiniteDuration
   ): Unit = {
-    val requestedDelay = value match {
-      case TickPace.Accelerated       => 1.millis
-      case TickPace.FixedDelay(delay) => delay
-    }
     val paceStartedAt = System.nanoTime()
-    while (
+    def waiting(delay: FiniteDuration): Boolean =
       !cancellation.isCancelled &&
-      System.nanoTime() - paceStartedAt < requestedDelay.toNanos &&
-      System.nanoTime() - startedAt < wallBudget.toNanos
-    ) {
-      val remaining = requestedDelay.toNanos - (System.nanoTime() - paceStartedAt)
-      LockSupport.parkNanos(math.min(remaining, 1.millis.toNanos))
+        System.nanoTime() - paceStartedAt < delay.toNanos &&
+        System.nanoTime() - startedAt < wallBudget.toNanos
+    value match {
+      // A game tick lasts 50 ms, time for the slices it gives the computers (one per queued
+      // signal, executionDelay apart). An accelerated tick ends once no computer has a slice
+      // due, or after those 50 ms, so a computer gets the work done in a tick that it would in
+      // the game and idle computers still run ahead.
+      case TickPace.Accelerated =>
+        val machines = constructed.toVector.flatMap(_.computers.values.map(_.machine))
+        while (waiting(GameTick) && machines.exists(MachineInternals.sliceDue))
+          LockSupport.parkNanos(200000L)
+      case TickPace.FixedDelay(delay) =>
+        while (waiting(delay)) {
+          val remaining = delay.toNanos - (System.nanoTime() - paceStartedAt)
+          LockSupport.parkNanos(math.min(remaining, 1.millis.toNanos))
+        }
     }
   }
+
+  private val GameTick = 50.millis
 }

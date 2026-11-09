@@ -1,6 +1,10 @@
 package ocelot.harness.core.runtime
 
+import java.util.concurrent.locks.LockSupport
+
+import totoro.ocelot.brain.Settings
 import totoro.ocelot.brain.entity.{Keyboard, Screen}
+import totoro.ocelot.brain.entity.machine.{Machine, MachineInternals}
 import totoro.ocelot.brain.user.User
 import totoro.ocelot.brain.util.ClipboardSplitter
 
@@ -25,17 +29,17 @@ private[runtime] final class InputController {
       val player = User(input.user)
       input match {
         case UserInput.KeyDown(key, character, _) =>
-          withKeyboard(keyboard) { _ =>
-            keyCode(key).map { code =>
-              screen.keyDown(character, code, player)
-              InputResult(1, 0)
+          withKeyboard(keyboard) { value =>
+            keyCode(key).flatMap { code =>
+              deliverKeys(value, player, Vector(("key_down", character, code)), 0, advanceTick)
+                .map(InputResult(1, _))
             }
           }
         case UserInput.KeyUp(key, character, _) =>
-          withKeyboard(keyboard) { _ =>
-            keyCode(key).map { code =>
-              screen.keyUp(character, code, player)
-              InputResult(1, 0)
+          withKeyboard(keyboard) { value =>
+            keyCode(key).flatMap { code =>
+              deliverKeys(value, player, Vector(("key_up", character, code)), 0, advanceTick)
+                .map(InputResult(1, _))
             }
           }
         case UserInput.TypeText(text, interKeyTicks, _) =>
@@ -45,36 +49,32 @@ private[runtime] final class InputController {
           else if (text.length.toLong * interKeyTicks > 10000L)
             Left(InvalidInput("typed text exceeds the 10000-tick input bound"))
           else
-            withKeyboard(keyboard) { _ =>
+            withKeyboard(keyboard) { value =>
               val characters = text.toVector
               val unknown = characters.find(character => keyCodeForCharacter(character).isEmpty)
               unknown match {
                 case Some(character) =>
                   Left(InvalidInput(f"no scan-code mapping for character U+${character.toInt}%04X"))
                 case None =>
-                  var ticks = 0
-                  characters.foreach { character =>
+                  val keys = characters.flatMap { character =>
                     val code = keyCodeForCharacter(character).get
-                    screen.keyDown(character, code, player)
-                    screen.keyUp(character, code, player)
-                    (0 until interKeyTicks).foreach { _ =>
-                      advanceTick()
-                      ticks += 1
-                    }
+                    Vector(("key_down", character, code), ("key_up", character, code))
                   }
-                  Right(InputResult(characters.size * 2, ticks))
+                  deliverKeys(value, player, keys, interKeyTicks, advanceTick)
+                    .map(InputResult(keys.size, _))
               }
             }
         case UserInput.Paste(text, _) =>
           if (text == null) Left(InvalidInput("clipboard text is required"))
           else
-            withKeyboard(keyboard) { _ =>
+            withKeyboard(keyboard) { value =>
               clipboardSplitter.split(text) match {
                 case None => Left(InvalidInput("clipboard input exceeds limits or is cooling down"))
                 case Some(chunks) =>
                   val values = chunks.toVector
                   values.foreach(screen.clipboard(_, player))
-                  Right(InputResult(values.size, 0))
+                  val ticks = awaitTaken(value, takers(value, player), advanceTick)
+                  Right(InputResult(values.size, ticks))
               }
             }
         case UserInput.Touch(x, y, button, _) =>
@@ -118,6 +118,84 @@ private[runtime] final class InputController {
       }
     }
   }
+
+  // A computer takes signals from a queue of at most 256, one a slice, and drops what arrives
+  // while it is full. Keys go to each running computer the keyboard reaches, as the keyboard
+  // sends them, but a refused key waits whole ticks for room; once all are sent, the ticks run on
+  // until the computers have taken them, so the screen read next shows what the keys did.
+  // Returns the ticks advanced.
+  private def deliverKeys(
+      keyboard: Keyboard,
+      player: User,
+      keys: Vector[(String, Char, Int)],
+      interKeyTicks: Int,
+      advanceTick: () => Unit
+  ): Either[HarnessError, Int] = {
+    val machines = takers(keyboard, player)
+    var ticks, stalled = 0
+    keys.foreach { case (name, character, code) =>
+      val arguments: Seq[AnyRef] =
+        Seq(keyboard.node.address, Char.box(character), Int.box(code)) ++
+          (if (Settings.get.inputUsername) Seq(player.nickname) else Nil)
+      machines.foreach { machine =>
+        while (
+          stalled < MaxStallTicks && machine.isRunning && !machine.signal(name, arguments: _*)
+        ) {
+          tick(machines, advanceTick)
+          ticks += 1
+          stalled += 1
+        }
+        if (stalled < MaxStallTicks) stalled = 0
+      }
+      (0 until interKeyTicks).foreach { _ =>
+        tick(machines, advanceTick)
+        ticks += 1
+      }
+    }
+    if (stalled >= MaxStallTicks)
+      Left(InputUnavailable(s"the computer took no input for $MaxStallTicks ticks"))
+    else Right(ticks + awaitTaken(keyboard, machines, advanceTick))
+  }
+
+  private def takers(keyboard: Keyboard, player: User): Vector[Machine] =
+    keyboard.node.reachableNodes.iterator
+      .map(_.host)
+      .collect {
+        case machine: Machine if machine.isRunning && machine.canInteract(player.nickname) =>
+          machine
+      }
+      .toVector
+
+  // Ticks until no computer holds input from this keyboard (other signals, such as modem
+  // traffic, do not count), at most MaxStallTicks. Returns the ticks advanced.
+  private def awaitTaken(
+      keyboard: Keyboard,
+      machines: Vector[Machine],
+      advanceTick: () => Unit
+  ): Int = {
+    val address = keyboard.node.address
+    var ticks = 0
+    while (
+      ticks < MaxStallTicks && machines.exists(machine =>
+        machine.isRunning && MachineInternals.holdsSignal(machine, InputSignals, address)
+      )
+    ) {
+      tick(machines, advanceTick)
+      ticks += 1
+    }
+    ticks
+  }
+
+  // One tick, then the slices it gave the computers (50 ms at most), as a game tick would.
+  private def tick(machines: Vector[Machine], advanceTick: () => Unit): Unit = {
+    advanceTick()
+    val deadline = System.nanoTime() + 50000000L
+    while (machines.exists(MachineInternals.sliceDue) && System.nanoTime() < deadline)
+      LockSupport.parkNanos(200000L)
+  }
+
+  private val InputSignals = Set("key_down", "key_up", "clipboard")
+  private val MaxStallTicks = 2000
 
   private def validateButton(button: Int): Either[HarnessError, Unit] =
     if (button == 0 || button == 1) Right(())

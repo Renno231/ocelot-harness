@@ -91,6 +91,11 @@ final case class WorkspaceDescription(
 
 final case class MediaEjectResult(driveId: String, ejected: Boolean)
 
+/** The input now on one side of a computer's redstone card (side: bottom, top, back, front, right
+  * or left).
+  */
+final case class RedstoneInputResult(computerId: String, side: String, value: Int)
+
 trait HarnessSession extends AutoCloseable {
   def describe(): WorkspaceDescription
   def startMachine(id: ComputerId): Either[HarnessError, MachineStatus]
@@ -113,5 +118,10 @@ trait HarnessSession extends AutoCloseable {
   def saveSnapshot(request: SnapshotRequest): Either[HarnessError, SnapshotDescription]
   def loadSnapshot(name: SnapshotName): Either[HarnessError, WorkspaceDescription]
   def ejectMedia(driveId: String): Either[HarnessError, MediaEjectResult]
+  def setRedstoneInput(
+      id: ComputerId,
+      side: String,
+      value: Int
+  ): Either[HarnessError, RedstoneInputResult]
   def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
 }

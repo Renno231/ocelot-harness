@@ -25,6 +25,32 @@ final class OcelotCtlSpec extends AnyFunSuite with Matchers {
       OcelotCtl.ReferenceMarkdown
   }
 
+  test("batch answers each stdin line of arguments with one JSON line, in order") {
+    val project = Files.createTempDirectory("ocelot-harness-batch-")
+    try {
+      val lines = Vector(
+        "\uFEFF" + ujson.write(ujson.Arr("--project", project.toString, "workspace", "describe")),
+        "",
+        "not json",
+        ujson.write(ujson.Arr("batch")),
+        ujson.write(ujson.Arr("screen", "wait", "main", "--contains", "gate>", "--typo", "1"))
+      ).mkString("\n")
+      val output = new java.io.ByteArrayOutputStream()
+      OcelotCtl.runBatch(
+        new java.io.ByteArrayInputStream(lines.getBytes(StandardCharsets.UTF_8)),
+        new java.io.PrintStream(output, true, "UTF-8")
+      ) shouldBe AppExitCode.Success
+
+      val answers = output.toString("UTF-8").split("\\r?\\n").toVector.map(ujson.read(_))
+      answers.map(_("exit").num.toInt) shouldBe
+        Vector(AppExitCode.Connection, AppExitCode.Usage, AppExitCode.Usage, AppExitCode.Usage)
+      answers.foreach(_("stdout").str shouldBe "")
+      answers(1)("stderr").str should include("JSON arrays of arguments")
+      answers(2)("stderr").str should include("does not nest")
+      answers(3)("stderr").str should include("--typo")
+    } finally Files.delete(project)
+  }
+
   test("CLI options reject unknown and duplicate flags") {
     OcelotCtl.run(
       Array("screen", "wait", "main", "--contains", "READY", "--typo", "1")

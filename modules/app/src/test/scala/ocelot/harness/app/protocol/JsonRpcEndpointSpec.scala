@@ -124,6 +124,38 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
     )("error")("data")("harnessCode").str shouldBe "unknown_drive"
   }
 
+  test("redstone.input sets a computer's redstone card input on one side") {
+    val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
+    response(
+      endpoint.handleLine(request(1, "harness.version", ujson.Obj("protocolMajor" -> 1)))
+    )
+
+    val set = response(
+      endpoint.handleLine(
+        request(
+          2,
+          "redstone.input",
+          ujson.Obj("computerId" -> "main", "side" -> "back", "value" -> 4)
+        )
+      )
+    )
+    set("result") shouldBe ujson.Obj("computerId" -> "main", "side" -> "back", "value" -> 4)
+    response(
+      endpoint.handleLine(
+        request(3, "redstone.input", ujson.Obj("computerId" -> "main", "side" -> "back"))
+      )
+    )("error")("code").num.toInt shouldBe -32602
+    response(
+      endpoint.handleLine(
+        request(
+          4,
+          "redstone.input",
+          ujson.Obj("computerId" -> "main", "side" -> "back", "value" -> 16)
+        )
+      )
+    )("error")("data")("harnessCode").str shouldBe "invalid_input"
+  }
+
   test("artifact methods return bounded metadata instead of inline bytes") {
     val endpoint = new JsonRpcEndpoint(new StubSession, None, () => ())
     response(
@@ -351,6 +383,14 @@ final class JsonRpcEndpointSpec extends AnyFunSuite with Matchers {
     override def ejectMedia(driveId: String): Either[HarnessError, MediaEjectResult] =
       if (driveId == "drive") Right(MediaEjectResult(driveId, ejected = true))
       else Left(HarnessError.UnknownDrive(driveId))
+
+    override def setRedstoneInput(
+        id: ComputerId,
+        side: String,
+        value: Int
+    ): Either[HarnessError, RedstoneInputResult] =
+      if (value < 0 || value > 15) Left(HarnessError.InvalidInput("redstone input must be 0-15"))
+      else Right(RedstoneInputResult(id.value, side, value))
 
     override def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle] =
       Right(

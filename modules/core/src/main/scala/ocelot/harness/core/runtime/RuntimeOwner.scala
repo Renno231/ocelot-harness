@@ -24,6 +24,7 @@ final class RuntimeOwner private[runtime] (
   private var activeSession: Option[BrainSession] = None
   private var brainConfigPath: Option[Path] = None
   private var shutdownHook: Option[AutoCloseable] = None
+  private var fineTimer: Option[Thread] = None
   private var initializationStarted = false
   private var closed = false
 
@@ -129,6 +130,12 @@ final class RuntimeOwner private[runtime] (
       brainConfigPath.foreach(path => complete(Files.deleteIfExists(path)))
       brainConfigPath = None
 
+      fineTimer.foreach { thread =>
+        thread.interrupt()
+        complete(thread.join(1000L))
+      }
+      fineTimer = None
+
       coordinator.ownerClosed(this)
       firstFailure.foreach(throw _)
     }
@@ -143,8 +150,29 @@ final class RuntimeOwner private[runtime] (
     brainConfigPath = Some(configPath)
     shutdownHook = Some(shutdownHooks.register(() => close()))
     initializationStarted = true
+    fineTimer = holdFineTimer()
     lifecycle.initialize(configPath, normalized.nativeLibraryDirectory)
   }
+
+  // Windows rounds every short wait up to its 15.6 ms timer tick, so a 1 ms park (key settling,
+  // clock pacing) takes 16 ms and typing a key 16 ms. HotSpot raises the timer to 1 ms for the
+  // length of a sleep that is not a whole multiple of 10 ms; this thread holds one such sleep for
+  // the runtime's life, so the harness's short waits take about the time they ask for.
+  private def holdFineTimer(): Option[Thread] =
+    if (!System.getProperty("os.name", "").toLowerCase.contains("win")) None
+    else {
+      val thread = new Thread(
+        new Runnable {
+          override def run(): Unit =
+            try Thread.sleep(Long.MaxValue)
+            catch { case _: InterruptedException => }
+        },
+        "ocelot-harness-fine-timer"
+      )
+      thread.setDaemon(true)
+      thread.start()
+      Some(thread)
+    }
 
   private[runtime] def closeAfterStartupFailure(): Unit = {
     try close()

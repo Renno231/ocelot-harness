@@ -77,6 +77,20 @@ private[app] final class JsonRpcEndpoint(
           string(call.params, "deviceId")
             .flatMap(id => domain(session.ejectMedia(id)))
             .map(value => ujson.Obj("deviceId" -> value.driveId, "ejected" -> value.ejected))
+        case "redstone.input" =>
+          (for {
+            id <- computerId(call.params)
+            side <- string(call.params, "side")
+            value <- int(call.params, "value")
+          } yield (id, side, value)).flatMap { case (id, side, value) =>
+            domain(session.setRedstoneInput(id, side, value)).map(result =>
+              ujson.Obj(
+                "computerId" -> result.computerId,
+                "side" -> result.side,
+                "value" -> result.value
+              )
+            )
+          }
         case "diagnostics.collect" => diagnostics(call.params)
         case "service.shutdown" =>
           shutdown()

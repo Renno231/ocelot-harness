@@ -1,5 +1,7 @@
 package ocelot.harness.app
 
+import java.io.{BufferedReader, ByteArrayOutputStream, InputStream, InputStreamReader, PrintStream}
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Path, Paths}
 
 import scala.annotation.tailrec
@@ -25,7 +27,8 @@ object OcelotCtl {
     if (arguments.toVector == Vector("--help") || arguments.toVector == Vector("help")) {
       System.out.print(ReferenceMarkdown)
       AppExitCode.Success
-    } else
+    } else if (arguments.toVector == Vector("batch")) runBatch(System.in, System.out)
+    else
       parseGlobal(arguments.toVector) match {
         case Left(message) => fail(AppExitCode.Usage, message)
         case Right(global) if global.arguments.headOption.contains("project") =>
@@ -42,6 +45,55 @@ object OcelotCtl {
               }
           }
       }
+
+  // One process for many commands, so a caller that drives the harness step by step pays for one
+  // JVM start: each stdin line is a JSON array of ocelotctl arguments, and each answer is one line
+  // {"exit": <code>, "stdout": <text>, "stderr": <text>}. Commands run one at a time, in order.
+  private[app] def runBatch(input: InputStream, output: PrintStream): Int = {
+    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
+    Iterator
+      .continually(reader.readLine())
+      .takeWhile(_ != null)
+      .map(_.stripPrefix("\uFEFF")) // .NET callers' stdin may start with a byte order mark
+      .filter(_.trim.nonEmpty)
+      .foreach { line =>
+        val arguments = Try(ujson.read(line).arr.map(_.str).toArray).toEither
+        val (exit, stdout, stderr) = captured {
+          arguments match {
+            case Left(error) =>
+              fail(
+                AppExitCode.Usage,
+                s"batch lines are JSON arrays of arguments: ${error.getMessage}"
+              )
+            case Right(values) if values.toVector == Vector("batch") =>
+              fail(AppExitCode.Usage, "batch does not nest")
+            case Right(values) => run(values)
+          }
+        }
+        output.println(
+          ujson.write(
+            ujson.Obj("exit" -> exit, "stdout" -> stdout, "stderr" -> stderr),
+            escapeUnicode = true // ASCII lines, whatever the console's code page
+          )
+        )
+        output.flush()
+      }
+    AppExitCode.Success
+  }
+
+  private def captured(body: => Int): (Int, String, String) = {
+    val (out, err) = (new ByteArrayOutputStream(), new ByteArrayOutputStream())
+    val (savedOut, savedErr) = (System.out, System.err)
+    System.setOut(new PrintStream(out, true, "UTF-8"))
+    System.setErr(new PrintStream(err, true, "UTF-8"))
+    val exit =
+      try body
+      finally {
+        System.setOut(savedOut)
+        System.setErr(savedErr)
+      }
+    (exit, out.toString("UTF-8"), err.toString("UTF-8"))
+  }
 
   private def runProjectCommand(global: Global): Int = {
     val trailingJson = global.arguments.lastOption.contains("--json")
@@ -300,6 +352,17 @@ object OcelotCtl {
               s"${value("deviceId").str}: ${if (value("ejected").bool) "ejected" else "empty"}"
           )
         )
+      case Vector("redstone", "input", id, side, value) =>
+        value.toIntOption
+          .toRight(s"redstone input must be a number: $value")
+          .map(level =>
+            CliRequest(
+              "redstone.input",
+              ujson.Obj("computerId" -> id, "side" -> side, "value" -> level),
+              result =>
+                s"${result("computerId").str} ${result("side").str}: ${result("value").num.toInt}"
+            )
+          )
       case Vector("diagnostics", "collect", tail @ _*) => diagnosticsRequest(tail.toVector)
       case _                                           => Left(usage)
     }
@@ -519,6 +582,7 @@ object OcelotCtl {
       |ocelotctl project import-desktop <desktop-directory> <project-directory> [--json]
       |ocelotctl --project <project-directory> project validate [--json]
       |ocelotctl version
+      |ocelotctl batch
       |ocelotctl workspace describe
       |ocelotctl machine <start|stop|reset> <computer-id>
       |ocelotctl simulation run --screen <id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
@@ -542,6 +606,7 @@ object OcelotCtl {
       |ocelotctl snapshot save <name> [--host-disks <reference-only|copy>]
       |ocelotctl snapshot load <name>
       |ocelotctl media eject <disk-drive-id>
+      |ocelotctl redstone input <computer-id> <side> <0..15>
       |ocelotctl diagnostics collect [--path <relative-path>]
       |```
       |
@@ -555,7 +620,7 @@ object OcelotCtl {
       |ocelot-harnessd serve <--stdio|--loopback> --project <path>
       |```
       |
-      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Artifact paths are project-relative and remain inside the configured artifact root.
+      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. `redstone input` sets what a computer's redstone card reads on one side (bottom, top, back, front, right, left, or 0–5), as a neighbouring block would; a rise to the card's wake threshold starts a stopped computer. `batch` keeps one process for many commands: each stdin line is a JSON array of arguments (global options included), and each answer is one stdout line `{"exit", "stdout", "stderr"}`. Typed keys wait whole ticks for room in the computer's 256-signal queue, so typing never drops keys, and typing and pasting return once the computer has taken the input, so the next screen read shows what it did; a computer that takes no input for 2000 ticks in a row fails it. Each key down and up costs the computer a slice, about 12 ms; a paste is one signal per line. Artifact paths are project-relative and remain inside the configured artifact root.
       |""".stripMargin
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])
