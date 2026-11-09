@@ -243,7 +243,10 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
           "hologram { kind = \"hologram\", tier = 2 }",
           "hologram { kind = \"hologram\", tier = 3 }"
         )
-        .replace("rack { kind = \"rack\" }", "rack { kind = \"rack\", aspectRatio = [1, 1] }")
+        .replace(
+          "rack { kind = \"rack\" }",
+          "rack { kind = \"rack\", aspectRatio = [1, 1], tablet = true }"
+        )
         .replace("label = \"media\"", "label = \"\"")
         .replace(
           "server:network\", to = \"server-screen:network",
@@ -257,6 +260,7 @@ final class ProjectLoaderSpec extends AnyFunSuite with Matchers with EitherValue
       errors.map(_.path) should contain allElementsOf Vector(
         "devices.hologram.tier",
         "devices.rack.aspectRatio",
+        "devices.rack.tablet",
         "devices.disk-drive.inventory[0].label",
         "connections[2].from"
       )

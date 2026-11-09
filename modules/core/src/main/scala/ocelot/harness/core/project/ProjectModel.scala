@@ -284,7 +284,8 @@ final case class ManifestDeviceDefinition(
     inventory: Vector[InventoryItemDefinition],
     label: Option[String],
     source: Option[Path],
-    access: Option[DiskAccess]
+    access: Option[DiskAccess],
+    tablet: Boolean = false
 )
 
 final case class DevicePortReference(device: DeviceId, port: String) {

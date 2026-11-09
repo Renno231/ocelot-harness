@@ -32,7 +32,7 @@ runtime {
 
 | `kind` | Options | Ports |
 |---|---|---|
-| `computer` | `tier`, `inventory` | `network` |
+| `computer` | `tier`, `inventory`, `tablet` | `network` |
 | `screen` | `tier`, `keyboard`, `aspectRatio` | `network` |
 | `rack` | — | six cardinal sides, `mount-1`…`mount-4` |
 | `server` | `tier`, `inventory` | `mount`, `network`, primary/secondary rack ports |
@@ -44,7 +44,7 @@ runtime {
 | `relay` | upgrade inventory | six cardinal sides |
 | `cable` | — | `network` |
 
-Tiered devices accept pinned-brain tiers 1–3, except hologram projectors which accept tiers 1–2. Server profiles accept tiers 1–3. Device keys are stable logical IDs.
+Tiered devices accept pinned-brain tiers 1–3, except hologram projectors which accept tiers 1–2. Server profiles accept tiers 1–3. Device keys are stable logical IDs. `tablet = true` makes a computer a tablet: it gets the `tablet` component on its own network, as an OC tablet does, and `getPitch()` reads a level hold (0). Give it a screen and keyboard as for any computer.
 
 ## Inventory
 

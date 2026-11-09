@@ -94,6 +94,9 @@ private[runtime] object ManifestHardwareCatalog {
       topology.connections.foreach { connection =>
         if (!isRackMount(connection, topology)) connect(connection, entities)
       }
+      topology.devices.filter(_.tablet).foreach { definition =>
+        attachTablet(entities(definition.id), add(new TabletComponent(definition.id.value)))
+      }
       entities.values.foreach {
         case computer: Computer =>
           val node = computer.machine.node
@@ -138,7 +141,10 @@ private[runtime] object ManifestHardwareCatalog {
     }
     val expectedEntityCount = topology.devices.size +
       topology.devices.map(_.inventory.size).sum +
-      topology.devices.count(device => device.kind == ManifestDeviceKind.Screen && device.keyboard)
+      topology.devices.count(device =>
+        device.kind == ManifestDeviceKind.Screen && device.keyboard
+      ) +
+      topology.devices.count(_.tablet)
     if (all.size != expectedEntityCount) {
       throw new IllegalArgumentException(
         s"snapshot entity count mismatch: expected $expectedEntityCount, found ${all.size}"
@@ -190,6 +196,14 @@ private[runtime] object ManifestHardwareCatalog {
       if (!isRackMount(connection, topology)) connect(connection, entities)
     }
     validateRestoredConnections(topology, entities)
+    topology.devices.filter(_.tablet).foreach { definition =>
+      val tablet = workspace.getEntitiesIter
+        .collectFirst { case value: TabletComponent if value.owner == definition.id.value => value }
+        .getOrElse(
+          throw new IllegalArgumentException(s"snapshot tablet is missing: ${definition.id.value}")
+        )
+      attachTablet(entities(definition.id), tablet)
+    }
     val keyboards = topology.devices.collect {
       case definition if definition.kind == ManifestDeviceKind.Screen && definition.keyboard =>
         val id = ScreenId.parse(definition.id.value).toOption.get
@@ -692,6 +706,13 @@ private[runtime] object ManifestHardwareCatalog {
     val right = endpointNode(connection.to, entities)
     if (left.network == null) Network.joinNewNetwork(left)
     left.connect(right)
+  }
+
+  // A tablet's component sits on its computer's own network, as the tablet's does in OC.
+  private def attachTablet(computer: Entity, tablet: TabletComponent): Unit = {
+    val node = computer.asInstanceOf[Environment].node
+    if (node.network == null) Network.joinNewNetwork(node)
+    node.connect(tablet.node)
   }
 
   private def endpointNode(

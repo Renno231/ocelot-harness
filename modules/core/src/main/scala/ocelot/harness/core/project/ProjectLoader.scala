@@ -745,7 +745,17 @@ object ProjectLoader {
       val path = s"devices.$rawId"
       rejectUnknown(
         path,
-        Set("kind", "tier", "keyboard", "aspectRatio", "inventory", "label", "source", "access")
+        Set(
+          "kind",
+          "tier",
+          "keyboard",
+          "tablet",
+          "aspectRatio",
+          "inventory",
+          "label",
+          "source",
+          "access"
+        )
       )
       val id = parseId(path, rawId, DeviceId.parse)
       val kind = requiredString(s"$path.kind").flatMap { value =>
@@ -758,6 +768,7 @@ object ProjectLoader {
       }
       val tier = if (config.hasPath(s"$path.tier")) requiredInt(s"$path.tier") else None
       val keyboard = optionalBoolean(s"$path.keyboard", default = false)
+      val tablet = optionalBoolean(s"$path.tablet", default = false)
       val aspect = optionalIntList(s"$path.aspectRatio", Vector(1, 1))
       if (aspect.size != 2 || aspect.exists(_ <= 0))
         invalid(s"$path.aspectRatio", "must contain two positive integers")
@@ -793,6 +804,8 @@ object ProjectLoader {
         }
         if (keyboard && value != ManifestDeviceKind.Screen)
           profile(s"$path.keyboard", "only screens may attach a keyboard")
+        if (tablet && value != ManifestDeviceKind.Computer)
+          profile(s"$path.tablet", "only computers can be tablets")
         if (config.hasPath(s"$path.aspectRatio") && value != ManifestDeviceKind.Screen)
           profile(s"$path.aspectRatio", "only screens use an aspect ratio")
         if (
@@ -818,7 +831,8 @@ object ProjectLoader {
         inventory,
         label,
         source,
-        access
+        access,
+        tablet
       )
     }
 
