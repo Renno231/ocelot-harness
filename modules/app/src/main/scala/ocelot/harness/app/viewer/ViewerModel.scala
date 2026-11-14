@@ -341,3 +341,81 @@ private[app] object ViewerProtocol {
   private def message(error: Throwable): String =
     Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
 }
+
+/** One per-tick reading of a computer, as `metrics.history` reports it. */
+private[app] final case class ViewerSample(
+    tick: Long,
+    computerId: String,
+    memoryUsedBytes: Long,
+    sliceNanos: Long,
+    signalQueueDepth: Int,
+    calls: Long
+)
+
+/** The last `MaxTicks` ticks of every computer's readings, for the viewer's graphs. */
+private[app] final class ViewerTimeline {
+  private var samples = Map.empty[String, Vector[ViewerSample]]
+  private var latest = 0L
+
+  /** The newest tick seen; the next poll asks for samples after it. */
+  def latestTick: Long = synchronized(latest)
+
+  def add(values: Vector[ViewerSample]): Unit = synchronized {
+    values.foreach { sample =>
+      latest = math.max(latest, sample.tick)
+      samples = samples.updated(
+        sample.computerId,
+        samples.getOrElse(sample.computerId, Vector.empty) :+ sample
+      )
+    }
+    samples = samples.view
+      .mapValues(_.filter(_.tick > latest - ViewerTimeline.MaxTicks))
+      .filter(_._2.nonEmpty)
+      .toMap
+  }
+
+  /** Each computer's readings of one measure, oldest first. */
+  def series(measure: ViewerSample => Double): Vector[(String, Vector[(Long, Double)])] =
+    synchronized {
+      samples.toVector.sortBy(_._1).map { case (id, values) =>
+        id -> values.map(sample => sample.tick -> measure(sample))
+      }
+    }
+}
+
+private[app] object ViewerTimeline {
+
+  /** One minute of game time; the service keeps the same span. */
+  val MaxTicks = 1200L
+
+  def decode(value: ujson.Value): Either[String, Vector[ViewerSample]] =
+    value match {
+      case root: ujson.Obj =>
+        root.value.get("samples") match {
+          case Some(ujson.Arr(items)) =>
+            items.toVector.zipWithIndex
+              .foldLeft[Either[String, Vector[ViewerSample]]](Right(Vector.empty)) {
+                case (result, (item, index)) =>
+                  result.flatMap { decoded =>
+                    sample(item).left.map(reason => s"samples[$index] $reason").map(decoded :+ _)
+                  }
+              }
+          case _ => Left("samples must be an array")
+        }
+      case _ => Left("metrics history must be an object")
+    }
+
+  private def sample(value: ujson.Value): Either[String, ViewerSample] =
+    try
+      Right(
+        ViewerSample(
+          value("tick").str.toLong,
+          value("computerId").str,
+          value("memoryUsedBytes").str.toLong,
+          value("sliceNanos").str.toLong,
+          value("signalQueueDepth").num.toInt,
+          value("calls").str.toLong
+        )
+      )
+    catch { case NonFatal(_) => Left("is not a metrics sample") }
+}

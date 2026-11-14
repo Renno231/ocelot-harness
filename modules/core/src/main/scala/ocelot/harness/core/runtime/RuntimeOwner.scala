@@ -51,7 +51,8 @@ final class RuntimeOwner private[runtime] (
                 Some(loaded.constructed),
                 Some(loaded.source),
                 lifecycle.version,
-                sessionClosed
+                sessionClosed,
+                lifecycle.scheduler
               )
               activeSession = Some(session)
               Right(session)
@@ -266,6 +267,9 @@ private[runtime] trait BrainLifecycle {
   def shutdown(): Unit
   def nativeLuaAvailable: Boolean
   def version: String = Ocelot.Version
+
+  /** Where computers schedule slices while the brain runs; none in lifecycle tests. */
+  def scheduler: Option[MachineScheduler] = None
 }
 
 private object OcelotBrainLifecycle extends BrainLifecycle {
@@ -273,11 +277,19 @@ private object OcelotBrainLifecycle extends BrainLifecycle {
     Ocelot.configPath = Some(brainConfigPath)
     Ocelot.librariesPath = Some(librariesPath)
     Ocelot.initialize()
+    installed = Some(MachineScheduler.install())
   }
 
+  @volatile private var installed: Option[MachineScheduler] = None
+
+  override def scheduler: Option[MachineScheduler] = installed
+
   override def shutdown(): Unit = {
-    try Ocelot.shutdown()
-    finally {
+    try {
+      installed.foreach(MachineScheduler.uninstall)
+      installed = None
+      Ocelot.shutdown()
+    } finally {
       Ocelot.configPath = None
       Ocelot.librariesPath = None
     }

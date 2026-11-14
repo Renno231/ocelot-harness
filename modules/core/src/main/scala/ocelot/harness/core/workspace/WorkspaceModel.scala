@@ -101,6 +101,7 @@ trait HarnessSession extends AutoCloseable {
   def startMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def stopMachine(id: ComputerId): Either[HarnessError, MachineStatus]
   def resetMachine(id: ComputerId): Either[HarnessError, MachineStatus]
+  def machineStatus(id: ComputerId): Either[HarnessError, MachineStatus]
   def run(request: RunRequest): Either[HarnessError, RunResult]
   def startClock(tps: Option[Int] = None): Either[HarnessError, SimulationClockStatus]
   def pauseClock(): Either[HarnessError, SimulationClockStatus]
@@ -124,4 +125,37 @@ trait HarnessSession extends AutoCloseable {
       value: Int
   ): Either[HarnessError, RedstoneInputResult]
   def diagnostics(request: DiagnosticRequest): Either[HarnessError, DiagnosticBundle]
+
+  // Observability: see docs/decisions/0005-observability.md.
+  def readTrace(query: TraceQuery): Either[HarnessError, TracePage]
+  def machineMetrics(): Either[HarnessError, Vector[MachineMetrics]]
+  def metricsHistory(
+      computerId: Option[ComputerId],
+      afterTick: Long
+  ): Either[HarnessError, Vector[MetricsSample]]
+  def resetMetrics(): Either[HarnessError, Unit]
+  def startProfile(computerId: Option[ComputerId]): Either[HarnessError, Unit]
+  def stopProfile(
+      relativePath: Option[String]
+  ): Either[HarnessError, (ProfileReport, Vector[ArtifactDescription])]
+  def executionMode(): Either[HarnessError, ExecutionMode]
+  def setExecutionMode(mode: ExecutionMode): Either[HarnessError, ExecutionMode]
+  def startRecording(name: SnapshotName): Either[HarnessError, RecordingStatus]
+  def stopRecording(): Either[HarnessError, RecordingStatus]
+  def replay(request: ReplayRequest): Either[HarnessError, ReplayResult]
+  def sweep(request: SweepRequest): Either[HarnessError, SweepResult]
+  def setBreakpoints(
+      file: Path,
+      lines: Vector[Int]
+  ): Either[HarnessError, Vector[DebugBreakpoint]]
+  def debugPause(): Either[HarnessError, DebugState]
+  def debugState(afterSequence: Option[Long], waitMillis: Long): Either[HarnessError, DebugState]
+  def debugFrames(): Either[HarnessError, Vector[DebugFrame]]
+  def debugVariables(reference: String): Either[HarnessError, Vector[DebugVariable]]
+  def debugResume(mode: String): Either[HarnessError, DebugState]
+  def diffSnapshots(from: SnapshotName, to: SnapshotName): Either[HarnessError, SnapshotComparison]
+
+  /** Starts a JVM flight recording of the service process (threads, allocation, GC, locks). */
+  def startJvmRecording(): Either[HarnessError, Unit]
+  def stopJvmRecording(relativePath: String): Either[HarnessError, ArtifactDescription]
 }

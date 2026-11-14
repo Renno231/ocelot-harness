@@ -14,10 +14,16 @@ object MachineState {
   case object Crashed extends MachineState
 }
 
+/** Guest memory as the machine's architecture last reported it after an execution slice. */
+final case class MachineMemory(freeBytes: Long, totalBytes: Long) {
+  def usedBytes: Long = totalBytes - freeBytes
+}
+
 final case class MachineStatus(
     id: ComputerId,
     state: MachineState,
-    lastError: Option[String]
+    lastError: Option[String],
+    memory: Option[MachineMemory] = None
 )
 
 sealed trait SimulationClockState extends Product with Serializable { def name: String }

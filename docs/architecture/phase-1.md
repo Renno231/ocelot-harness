@@ -289,9 +289,19 @@ It parses the OpenComputers `font.hex` resource into 8×16 and 16×16 glyphs, re
 - protocol execution requests cap one run at 10,000,000 ticks and 300,000 milliseconds
 - protocol errors and harness domain errors have separate stable codes
 - mutating methods return resulting state and observation revision
+- machine states carry the guest memory the brain last reported after an execution slice (`totalBytes`, `freeBytes`, `usedBytes`, or `null` before the first slice); `machine.status` reads one machine without mutating it
+- observation-heavy methods accept optional response projections so agents can avoid unused cell, event, and timeline payloads
 - large binary artifacts are written beneath the project artifact root and returned by path plus checksum
 
-The dispatcher receives parsed requests and calls `HarnessSession`; transports only move framed messages.
+The dispatcher receives parsed requests and calls `HarnessSession`; transports only move framed messages. `screen.read` and `simulation.run` accept an optional `projection` parameter:
+
+| Projection | `screen.read` | `simulation.run` |
+|---|---|---|
+| `summary` | ID, revision, dimensions, power state, and capture tick | stop reason, elapsed ticks/time, machine states, and screen revisions |
+| `text` | summary plus screen text | summary plus text projections for every observed screen |
+| `full` | complete text, cell/color, palette, runtime, and precision data | complete events, full screens, timeline, and truncation metadata |
+
+Omitting `projection` retains the complete `full` protocol-v1 response for compatibility. Unsupported projection names are invalid parameters. Human-readable CLI screen reads and bounded waits request compact projections; `--json` retains the complete response expected by existing CLI consumers.
 
 ## Project manifest
 
@@ -418,7 +428,7 @@ Text observations offer three formats:
 | `cells` | resolution, palette, code points, foreground/background | exact GUI assertions and rendering |
 | `png` | headless raster artifact | visual inspection and image comparison |
 
-Every observation includes a monotonically increasing session-local revision. The revision changes when relevant screen state changes. Bounded runs can wait for a revision greater than a known value, and the viewer polls at a configured bounded interval but rerenders only changed revisions.
+Every observation includes a monotonically increasing session-local revision. The revision changes when relevant screen state changes. Bounded runs can wait for a revision greater than a known value, and the viewer polls at a configured bounded interval but rerenders only changed revisions. Protocol clients request `summary` or `text` projections for token-efficient agent observations and reserve `full` for exact cell/color consumers such as the viewer.
 
 ## Service lifecycle and transports
 
@@ -499,6 +509,10 @@ screen PNGs
 command timeline
 error and stack trace
 ```
+
+Diagnostic bundles also carry the flight recorder's last 2,000 events (`trace.txt`) and each computer's meters (`metrics.txt`) when the session records them.
+
+Inside the emulated computers, an instrumentation chunk feeds a bounded flight recorder (component calls, signals, inputs, lifecycle), per-computer meters against OpenComputers' limits, a sampling profiler, and a debugger; a deterministic scheduler mode makes runs repeatable for recording, replay and lag sweeps. Snapshot diffs and JVM flight recordings round this out. See [ADR 0005](../decisions/0005-observability.md) for the design, bounds and limits.
 
 Artifact writes return a relative project path, byte size, media type, and SHA-256 checksum. Each write uses a temporary sibling and atomic rename, rejects path traversal and symlink escapes, and remains subject to the service-owned 16 MiB artifact ceiling. Diagnostic ZIP limits apply to both declared uncompressed entries and the final archive.
 

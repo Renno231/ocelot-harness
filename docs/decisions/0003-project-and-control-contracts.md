@@ -27,13 +27,16 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 - Support newline-delimited JSON-RPC over stdio for an owning agent/test process.
 - Support authenticated loopback transport for persistent service access by separate CLI and viewer processes.
 - Return artifact paths and SHA-256 metadata instead of embedding large binary payloads in JSON.
+- Let observation-heavy `screen.read` and `simulation.run` calls request `summary`, `text`, or `full` response projections; omission retains the complete protocol-v1 response.
 - Expose additive simulation start/pause/resume/step/rate/status methods while retaining bounded condition runs.
+- Report each machine's last brain-reported guest memory (total, free, used bytes) on machine states, with a read-only `machine.status` method.
 
 ## Consequences
 
 - Project topology can be reviewed and version-controlled.
 - Random runtime addresses do not destabilize scripts or tests.
 - Agent integrations and the general CLI use one command contract.
+- Agents can avoid unused screen-cell, event, and timeline payloads without weakening exact viewer and diagnostic observations.
 - The service can remain alive and advance continuously between shell commands while users observe and control the same session through one or more viewers.
 - Loopback lifecycle metadata and authentication require dedicated security and stale-process tests.
 - Schema and protocol changes require compatibility policy and contract tests.
@@ -50,4 +53,4 @@ Projects need a reviewable desired-configuration format independent of Ocelot's 
 
 Project construction parses schema versions 1 and 2 into immutable typed models before creating or importing brain objects. Contract tests prove deterministic multi-error validation, strict security/hardware keys, project-local includes, typed logical IDs, canonical path enforcement across traversal and Windows junctions, service-owned external roots, Internet double opt-in, expanded device legality, Desktop graph preservation, and service-owned topology caps.
 
-Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent access, continuous clock controls and lossless counters, concurrent CLI calls beside persistent viewer connections, bounded shutdown, and path handling with spaces.
+Protocol and process tests prove strict bounded JSON-RPC framing, major-version negotiation, distinct protocol/domain errors, artifact references, backward-compatible full responses, compact summary/text projections, protocol-only stdio, constant-time loopback authentication, owner-only atomic metadata, verified project-owner cleanup, loopback-only persistent access, continuous clock controls and lossless counters, concurrent CLI calls beside persistent viewer connections, bounded shutdown, and path handling with spaces.

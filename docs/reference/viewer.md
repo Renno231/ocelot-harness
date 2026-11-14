@@ -53,6 +53,10 @@ ocelot-viewer [--project <path>] [--screen <id>] [--scale <1..8>] [--refresh-ms 
 
 Only the selected screen is polled. A persistent authenticated connection is reused, and the image is rerendered only when the immutable screen revision changes. The window waits for the first rendered snapshot before appearing, sizes its viewport to the native raster, and shrinks only when necessary to fit the usable desktop.
 
+## Graphs
+
+**Graphs** opens four line graphs under the screen, one line per computer, over the last minute of game time (1,200 ticks): memory in use, run time per tick, component calls per tick, and signals waiting in the 256-signal queue. Each title shows the peak in view and every computer's latest value. The graphs poll the service twice a second while open and stop when closed.
+
 ## Controls
 
 | Host action | Emulated input |

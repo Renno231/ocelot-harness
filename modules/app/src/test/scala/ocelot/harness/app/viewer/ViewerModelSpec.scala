@@ -6,6 +6,36 @@ import org.scalatest.matchers.should.Matchers
 import ocelot.harness.app.ViewerOptions
 
 final class ViewerModelSpec extends AnyFunSuite with Matchers {
+  test("graph timeline decodes metrics samples and keeps each computer's last minute of ticks") {
+    def wire(tick: Long, id: String, memory: Long) =
+      ujson.Obj(
+        "tick" -> tick.toString,
+        "computerId" -> id,
+        "memoryUsedBytes" -> memory.toString,
+        "sliceNanos" -> "2000000",
+        "signalQueueDepth" -> 3,
+        "calls" -> "4"
+      )
+    val timeline = new ViewerTimeline
+    val first = ViewerTimeline.decode(
+      ujson.Obj("samples" -> ujson.Arr(wire(1, "main", 1024), wire(1, "relay", 2048)))
+    )
+    first.map(_.head) shouldBe Right(ViewerSample(1L, "main", 1024L, 2000000L, 3, 4L))
+    timeline.add(first.toOption.get)
+    timeline.add(
+      ViewerTimeline
+        .decode(ujson.Obj("samples" -> ujson.Arr(wire(1300, "main", 4096))))
+        .toOption
+        .get
+    )
+    timeline.latestTick shouldBe 1300L
+    timeline.series(_.memoryUsedBytes.toDouble) shouldBe Vector("main" -> Vector(1300L -> 4096.0))
+    ViewerTimeline
+      .decode(ujson.Obj("samples" -> ujson.Arr(ujson.Obj("tick" -> 1))))
+      .isLeft shouldBe true
+    ViewerTimeline.decode(ujson.Arr()).isLeft shouldBe true
+  }
+
   test("screen wire snapshots decode lossless revisions, cells, and optional fields") {
     val decoded = ViewerProtocol.decodeScreen(
       ujson.Obj(

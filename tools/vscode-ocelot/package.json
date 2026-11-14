@@ -1,0 +1,83 @@
+{
+  "name": "ocelot-harness-debug",
+  "displayName": "Ocelot Harness Debugger",
+  "description": "Breakpoints, stepping, stack and variables for Lua running on Ocelot Harness computers.",
+  "version": "0.1.0",
+  "publisher": "ocelot-harness",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onDebugResolve:ocelot",
+    "onDebugInitialConfigurations"
+  ],
+  "contributes": {
+    "breakpoints": [
+      {
+        "language": "lua"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "ocelot",
+        "label": "Ocelot Harness",
+        "languages": [
+          "lua"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "required": [
+              "project"
+            ],
+            "properties": {
+              "project": {
+                "type": "string",
+                "description": "Project folder whose running ocelot-harnessd service to debug.",
+                "default": "${workspaceFolder}"
+              },
+              "harness": {
+                "type": "string",
+                "description": "Ocelot Harness folder (a download or the source checkout). Defaults to the ocelotHarness.home setting."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "ocelot",
+            "request": "attach",
+            "name": "Debug Ocelot computers",
+            "project": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Ocelot Harness: debug computers",
+            "description": "Attach to the project's running ocelot-harnessd service.",
+            "body": {
+              "type": "ocelot",
+              "request": "attach",
+              "name": "Debug Ocelot computers",
+              "project": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Ocelot Harness",
+      "properties": {
+        "ocelotHarness.home": {
+          "type": "string",
+          "default": "",
+          "description": "Ocelot Harness folder (a download or the source checkout) that contains bin/ocelot-dap or scripts/ocelot-dap."
+        }
+      }
+    }
+  }
+}

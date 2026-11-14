@@ -151,6 +151,12 @@ private[runtime] object InteractiveExecutionProbe extends EitherValues with Matc
       val ready = runUntil(session, ScreenContains(screenId, "READY"))
       ready.stopReason shouldBe RunStopReason.ConditionSatisfied
       Console.out.println("INTERACTIVE_READY=true")
+      val reported = session.machineStatus(computerId).value.memory
+      reported shouldBe defined
+      val memory = reported.get
+      memory.totalBytes should be > 0L
+      memory.freeBytes should (be > 0L and be < memory.totalBytes)
+      memory.usedBytes shouldBe memory.totalBytes - memory.freeBytes
 
       val textArtifact = session
         .captureScreen(

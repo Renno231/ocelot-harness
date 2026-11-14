@@ -56,6 +56,7 @@ The viewer requires a graphical desktop/display and the usual X11/font libraries
 - Projects contain a manifest and host-backed program files. Edit a project's program, then use the machine lifecycle commands to restart it.
 - Schema-v2 projects advance at 20 TPS by default. Use `ocelotctl --project PATH simulation status` to inspect the clock or `simulation rate 100` to change its target rate.
 - The daemon is headless. The separate viewer observes and controls the same emulated screen; closing it does not stop the project.
+- To find out why a program misbehaves: `trace` lists every component call and signal, `metrics` shows how close each computer runs to OpenComputers' limits, `profile` writes a flame graph, `record`/`replay` repeat a run exactly, `sweep` reruns it under server lag, and `debug` stops a computer on a breakpoint. `tools/vscode-ocelot/` is a VS Code debugger extension that uses `bin/ocelot-dap`; its README explains how to install it.
 - `examples/two-computers/` provides a small public example. Copy it to your own project directory before modifying or running it.
 - The included CLI, manifest, viewer and Desktop-import guides are under `docs/reference/`. Where source-checkout examples use `scripts/`, use `bin/` in a download.
 

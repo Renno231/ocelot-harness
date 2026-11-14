@@ -37,7 +37,11 @@ object OcelotCtl {
           parseCommand(global.arguments) match {
             case Left(message) => fail(AppExitCode.Usage, message)
             case Right(request) =>
-              LoopbackClient.call(global.projectRoot, request.method, request.params) match {
+              LoopbackClient.call(
+                global.projectRoot,
+                request.method,
+                request.paramsFor(global.json)
+              ) match {
                 case Left(error) => fail(error.exitCode, error.message, error.harnessCode)
                 case Right(result) =>
                   printResult(global.json, result, request.human)
@@ -255,8 +259,17 @@ object OcelotCtl {
             value => s"${value("computerId").str}: ${value("state").str}"
           )
         )
+      case Vector("machine", "status", id) =>
+        Right(CliRequest("machine.status", ujson.Obj("computerId" -> id), machineStatusHuman))
       case Vector("screen", "read", id) =>
-        Right(CliRequest("screen.read", ujson.Obj("screenId" -> id), value => value("text").str))
+        Right(
+          CliRequest(
+            "screen.read",
+            ujson.Obj("screenId" -> id),
+            value => value("text").str,
+            Some("text")
+          )
+        )
       case Vector("screen", "wait", id, tail @ _*) => waitRequest(id, tail.toVector)
       case Vector("simulation", "run", tail @ _*)  => simulationRequest(tail.toVector)
       case Vector("simulation", "start") =>
@@ -335,6 +348,25 @@ object OcelotCtl {
         )
       case Vector("screen", "capture", id, tail @ _*)  => captureRequest(id, tail.toVector)
       case Vector("snapshot", "save", name, tail @ _*) => snapshotSave(name, tail.toVector)
+      case Vector("snapshot", "diff", from, to) =>
+        Right(CliRequest("snapshot.diff", ujson.Obj("from" -> from, "to" -> to), snapshotDiffHuman))
+      case Vector("jfr", "start") =>
+        Right(
+          CliRequest(
+            "jvm.recording.start",
+            ujson.Obj(),
+            _ => "recording the service JVM; reproduce the problem, then `jfr stop`"
+          )
+        )
+      case Vector("jfr", "stop", tail @ _*) =>
+        options(tail.toVector, Set("--path")).map(parsed =>
+          CliRequest(
+            "jvm.recording.stop",
+            ujson.Obj("path" -> parsed.getOrElse("--path", "jvm/latest.jfr")),
+            value =>
+              s"wrote ${value("artifact")("relativePath").str} (${value("artifact")("size").str} bytes); open it in JDK Mission Control"
+          )
+        )
       case Vector("snapshot", "load", name) =>
         Right(
           CliRequest(
@@ -364,8 +396,347 @@ object OcelotCtl {
             )
           )
       case Vector("diagnostics", "collect", tail @ _*) => diagnosticsRequest(tail.toVector)
-      case _                                           => Left(usage)
+      case "trace" +: tail                             => traceRequest(tail)
+      case Vector("metrics", tail @ _*)                => metricsRequest(tail.toVector)
+      case Vector("profile", "start", tail @ _*) =>
+        options(tail.toVector, Set("--computer")).map(parsed =>
+          CliRequest(
+            "profile.start",
+            parsed.get("--computer").fold(ujson.Obj())(id => ujson.Obj("computerId" -> id)),
+            _ => "profiling; run the simulation, then `profile stop`"
+          )
+        )
+      case Vector("profile", "stop", tail @ _*) =>
+        options(tail.toVector, Set("--path")).map(parsed =>
+          CliRequest(
+            "profile.stop",
+            ujson.Obj("path" -> parsed.getOrElse("--path", "profiles/latest")),
+            profileHuman
+          )
+        )
+      case Vector("simulation", "mode") =>
+        Right(CliRequest("simulation.mode", ujson.Obj(), modeHuman))
+      case Vector("simulation", "mode", "threaded") =>
+        Right(CliRequest("simulation.mode", ujson.Obj("mode" -> "threaded"), modeHuman))
+      case Vector("simulation", "mode", "deterministic", tail @ _*) =>
+        options(tail.toVector, Set("--server-tps"))
+          .flatMap(optionalInt(_, "--server-tps", 20))
+          .map(tps =>
+            CliRequest(
+              "simulation.mode",
+              ujson.Obj("mode" -> "deterministic", "serverTps" -> tps),
+              modeHuman
+            )
+          )
+      case Vector("record", "start", name) =>
+        Right(CliRequest("recording.start", ujson.Obj("name" -> name), recordingHuman))
+      case Vector("record", "stop") =>
+        Right(CliRequest("recording.stop", ujson.Obj(), recordingHuman))
+      case Vector("replay", name, tail @ _*) => replayRequest(name, tail.toVector)
+      case Vector("sweep", name, tail @ _*)  => sweepRequest(name, tail.toVector)
+      case "debug" +: tail                   => debugRequest(tail)
+      case _                                 => Left(usage)
     }
+
+  private def traceRequest(arguments: Vector[String]): Either[String, CliRequest] =
+    for {
+      parsed <- options(arguments, Set("--computer", "--kind", "--name", "--after", "--limit"))
+      limit <- optionalInt(parsed, "--limit", 50)
+      after <- parsed
+        .get("--after")
+        .map(value => Try(value.toLong).toEither.left.map(_ => "--after must be an integer"))
+        .getOrElse(Right(0L))
+    } yield {
+      val params = ujson.Obj("limit" -> limit, "afterSequence" -> ujson.Num(after.toDouble))
+      parsed.get("--computer").foreach(id => params("computerId") = id)
+      parsed.get("--name").foreach(text => params("nameContains") = text)
+      parsed
+        .get("--kind")
+        .foreach(kinds =>
+          params("kinds") = ujson.Arr.from(kinds.split(',').map(_.trim).filter(_.nonEmpty))
+        )
+      CliRequest("trace.read", params, traceHuman)
+    }
+
+  private def metricsRequest(arguments: Vector[String]): Either[String, CliRequest] =
+    arguments match {
+      case Vector("reset") => Right(CliRequest("metrics.reset", ujson.Obj(), _ => "meters reset"))
+      case _ =>
+        options(arguments, Set("--computer", "--history")).flatMap { parsed =>
+          parsed.get("--history") match {
+            case None =>
+              Right(CliRequest("metrics.read", ujson.Obj(), metricsHuman(parsed.get("--computer"))))
+            case Some(ticks) =>
+              integer(ticks, "--history").map { count =>
+                val params = ujson.Obj()
+                parsed.get("--computer").foreach(id => params("computerId") = id)
+                CliRequest("metrics.history", params, historyHuman(count))
+              }
+          }
+        }
+    }
+
+  private def replayRequest(name: String, arguments: Vector[String]): Either[String, CliRequest] =
+    for {
+      parsed <- options(arguments, Set("--until-screen", "--contains", "--timeout"))
+      timeout <- optionalDurationMillis(parsed, "--timeout", 300000L)
+      until <- (parsed.get("--until-screen"), parsed.get("--contains")) match {
+        case (Some(screen), Some(text)) =>
+          Right(Some(ujson.Obj("type" -> "screen_contains", "screenId" -> screen, "text" -> text)))
+        case (None, None) => Right(None)
+        case _            => Left("--until-screen and --contains go together")
+      }
+    } yield {
+      val params = ujson.Obj("name" -> name, "timeoutMillis" -> ujson.Num(timeout.toDouble))
+      until.foreach(value => params("until") = value)
+      CliRequest("recording.replay", params, replayHuman)
+    }
+
+  private def sweepRequest(name: String, arguments: Vector[String]): Either[String, CliRequest] =
+    for {
+      parsed <- options(
+        arguments,
+        Set(
+          "--screen",
+          "--contains",
+          "--runs",
+          "--max-ticks",
+          "--min-tps",
+          "--max-tps",
+          "--seed",
+          "--timeout"
+        )
+      )
+      screen <- required(parsed, "--screen")
+      text <- required(parsed, "--contains")
+      runs <- optionalInt(parsed, "--runs", 10)
+      maxTicks <- optionalInt(parsed, "--max-ticks", 2000)
+      minTps <- optionalInt(parsed, "--min-tps", 5)
+      maxTps <- optionalInt(parsed, "--max-tps", 20)
+      seed <- optionalInt(parsed, "--seed", 1)
+      timeout <- optionalDurationMillis(parsed, "--timeout", 300000L)
+    } yield CliRequest(
+      "simulation.sweep",
+      ujson.Obj(
+        "snapshot" -> name,
+        "condition" -> ujson.Obj("type" -> "screen_contains", "screenId" -> screen, "text" -> text),
+        "runs" -> runs,
+        "maxTicks" -> maxTicks,
+        "minServerTps" -> minTps,
+        "maxServerTps" -> maxTps,
+        "seed" -> seed,
+        "timeoutMillis" -> ujson.Num(timeout.toDouble)
+      ),
+      sweepHuman
+    )
+
+  private def debugRequest(arguments: Vector[String]): Either[String, CliRequest] =
+    arguments match {
+      case "break" +: file +: lines =>
+        lines
+          .foldLeft[Either[String, Vector[Int]]](Right(Vector.empty)) { (result, line) =>
+            result.flatMap(values => boundedInteger(line, "line", 1, Int.MaxValue).map(values :+ _))
+          }
+          .map(values =>
+            CliRequest(
+              "debug.breakpoints",
+              ujson.Obj(
+                "file" -> Paths.get(file).toAbsolutePath.normalize().toString,
+                "lines" -> ujson.Arr.from(values)
+              ),
+              value =>
+                value("breakpoints").arr
+                  .map(point => s"${point("file").str}:${point("line").num.toInt}") match {
+                  case points if points.isEmpty => "no breakpoints in that file"
+                  case points                   => points.mkString("breakpoints: ", ", ", "")
+                }
+            )
+          )
+      case Vector("pause") =>
+        Right(
+          CliRequest("debug.pause", ujson.Obj(), _ => "pausing at the next line a computer runs")
+        )
+      case "wait" +: tail =>
+        for {
+          parsed <- options(tail.toVector, Set("--timeout", "--after"))
+          timeout <- optionalDurationMillis(parsed, "--timeout", 30000L)
+          after <- optionalInt(parsed, "--after", 0)
+        } yield CliRequest(
+          "debug.state",
+          ujson.Obj(
+            "afterSequence" -> after,
+            "waitMillis" -> ujson.Num(math.min(timeout, 60000L).toDouble)
+          ),
+          debugStateHuman
+        )
+      case Vector("state") => Right(CliRequest("debug.state", ujson.Obj(), debugStateHuman))
+      case Vector("stack") => Right(CliRequest("debug.frames", ujson.Obj(), framesHuman))
+      case Vector("vars")  => Right(variablesRequest("0:L"))
+      case Vector("vars", reference) => Right(variablesRequest(reference))
+      case Vector(command) if DebugResumeModes.contains(command) =>
+        Right(
+          CliRequest(
+            "debug.resume",
+            ujson.Obj("mode" -> DebugResumeModes(command)),
+            debugStateHuman
+          )
+        )
+      case _ => Left(usage)
+    }
+
+  private val DebugResumeModes =
+    Map("continue" -> "continue", "step" -> "in", "next" -> "over", "out" -> "out")
+
+  private def variablesRequest(reference: String): CliRequest =
+    CliRequest(
+      "debug.variables",
+      ujson.Obj("reference" -> reference),
+      value =>
+        value("variables").arr
+          .map { variable =>
+            val more = variable("reference") match {
+              case ujson.Str(id) => s"  (open with `debug vars $id`)"
+              case _             => ""
+            }
+            s"${variable("name").str} = ${variable("value").str}$more"
+          }
+          .mkString("\n")
+    )
+
+  private def traceHuman(value: ujson.Value): String = {
+    val lines = value("events").arr.map { event =>
+      val who = event("computerId") match {
+        case ujson.Str(id) => id
+        case _             => "harness"
+      }
+      val arguments = event("arguments").arr.map(_.str).mkString(", ")
+      val results = event("results").arr.map(_.str)
+      val detail = event("kind").str match {
+        case "call" =>
+          s"calls ${event("name").str}($arguments)" +
+            (if (results.isEmpty) "" else s" -> ${results.mkString(", ")}")
+        case "signal_queued" => s"receives ${event("name").str}($arguments)"
+        case "signal_taken"  => s"handles ${event("name").str}($arguments)"
+        case "input"         => s"gets input ${event("name").str} $arguments"
+        case other           => s"$other ${event("name").str}"
+      }
+      val note = event("note") match {
+        case ujson.Str(text) => s"  [$text]"
+        case _               => ""
+      }
+      s"#${event("sequence").str} tick ${event("tick").str} $who $detail$note"
+    }
+    val dropped = value("droppedCount").str.toLong
+    (lines ++ (if (dropped > 0) Seq(s"($dropped older events were dropped)") else Seq.empty))
+      .mkString("\n")
+  }
+
+  private def metricsHuman(computer: Option[String])(value: ujson.Value): String =
+    value("computers").arr
+      .filter(entry => computer.forall(_ == entry("computerId").str))
+      .map { entry =>
+        def bytes(field: String) = entry(field) match {
+          case ujson.Str(text) => s"${text.toLong / 1024} KiB"
+          case _               => "?"
+        }
+        val calls =
+          entry("calls").arr.take(5).map(call => s"${call("name").str} x${call("count").str}")
+        Seq(
+          s"${entry("computerId").str}:",
+          s"  memory ${bytes("memoryUsedBytes")} of ${bytes("memoryTotalBytes")} (peak ${bytes("memoryPeakBytes")})",
+          s"  longest run without yielding ${entry("longestSliceNanos").str.toLong / 1000000} ms of ${entry("sliceTimeoutNanos").str.toLong / 1000000} ms allowed",
+          s"  signals waiting ${entry("signalQueueDepth").num.toInt} of ${entry("signalQueueLimit").num.toInt} (peak ${entry("signalQueuePeak").num.toInt}), longest wait ${entry("longestSignalWaitTicks").str} ticks",
+          f"  call budget: ran out ${entry("callBudgetExhausted").str} times, peak ${entry("peakCallBudgetUsed").num * 100}%.0f%% of a tick's budget",
+          s"  most calls: ${if (calls.isEmpty) "none" else calls.mkString(", ")}"
+        ).mkString("\n")
+      }
+      .mkString("\n")
+
+  private def historyHuman(count: Int)(value: ujson.Value): String =
+    value("samples").arr
+      .takeRight(count)
+      .map(sample =>
+        s"tick ${sample("tick").str} ${sample("computerId").str}: memory ${sample("memoryUsedBytes").str.toLong / 1024} KiB, " +
+          s"ran ${sample("sliceNanos").str.toLong / 1000} us, ${sample("calls").str} calls, ${sample("signalQueueDepth").num.toInt} signals waiting"
+      )
+      .mkString("\n")
+
+  private def snapshotDiffHuman(value: ujson.Value): String = {
+    val changes = value("changes").arr.map { change =>
+      val before = change("before") match { case ujson.Str(text) => text; case _ => "" }
+      val after = change("after") match { case ujson.Str(text) => text; case _ => "" }
+      change("change").str match {
+        case "added"   => s"+ ${change("path").str}: $after"
+        case "removed" => s"- ${change("path").str}: $before"
+        case _         => s"~ ${change("path").str}: $before -> $after"
+      }
+    }
+    val total = value("totalChanges").num.toInt
+    (Seq(
+      s"${value("from").str} (tick ${value("fromTick").str}) -> ${value("to").str} (tick ${value("toTick").str}): $total changes"
+    ) ++ changes ++
+      (if (total > changes.size) Seq(s"(first ${changes.size} shown)") else Seq.empty) ++
+      value("notes").arr.map(note => s"note: ${note.str}")).mkString("\n")
+  }
+
+  private def profileHuman(value: ujson.Value): String = {
+    val samples = value("samples").str.toLong
+    val hottest = value("hottestLines").arr.take(10).map { line =>
+      val share = if (samples == 0L) 0.0 else line("samples").str.toLong * 100.0 / samples
+      f"  $share%5.1f%%  ${line("line").str}"
+    }
+    val artifacts = value("artifacts").arr.map(artifact => s"  ${artifact("relativePath").str}")
+    (Seq(
+      s"$samples samples over ${value("ticks").str} ticks; hottest lines (time inside OpenComputers' kernel counts at the line that called it):"
+    ) ++ hottest ++
+      (if (artifacts.isEmpty) Seq.empty else "written to the artifacts folder:" +: artifacts))
+      .mkString("\n")
+  }
+
+  private def modeHuman(value: ujson.Value): String = value("serverTps") match {
+    case ujson.Num(tps) => s"deterministic, as a server running at ${tps.toInt} TPS"
+    case _              => "threaded, as in game"
+  }
+
+  private def recordingHuman(value: ujson.Value): String =
+    if (value("active").bool) s"recording ${value("name").str} from tick ${value("startTick").str}"
+    else
+      s"recorded ${value("name").str}: ${value("ticks").str} ticks, ${value("inputs").num.toInt} inputs" +
+        (if (value("limitReached").bool) " (stopped growing at its limit)" else "")
+
+  private def replayHuman(value: ujson.Value): String =
+    value("divergedAtTick") match {
+      case ujson.Str(tick) =>
+        s"replay differs from the recording at tick $tick: ${value("divergence").str}"
+      case _ =>
+        s"replayed ${value("replayedTicks").str} of ${value("recordedTicks").str} ticks, all matching; stopped at tick ${value("stoppedAtTick").str}"
+    }
+
+  private def sweepHuman(value: ujson.Value): String = {
+    val runs = value("runs").arr.map { run =>
+      s"  seed ${run("seed").str}: ${if (run("passed").bool) "passed" else "FAILED"} after ${run("ticks").str} ticks, server ${run("minServerTps").num.toInt}-${run("maxServerTps").num.toInt} TPS"
+    }
+    val failing = value("failingSeeds").arr.map(_.str)
+    ((if (failing.isEmpty) "every run passed"
+      else s"failing seeds: ${failing.mkString(", ")}") +: runs)
+      .mkString("\n")
+  }
+
+  private def debugStateHuman(value: ujson.Value): String =
+    if (value("paused").bool)
+      s"${value("computerId").str} paused (${value("reason").str}); pause #${value("pauseSequence").str}"
+    else "running"
+
+  private def framesHuman(value: ujson.Value): String =
+    value("frames").arr
+      .map { frame =>
+        val where = frame("hostPath") match {
+          case ujson.Str(path) => path
+          case _               => frame("source").str
+        }
+        s"#${frame("index").num.toInt} ${frame("function").str} at $where:${frame("line").num.toInt}"
+      }
+      .mkString("\n")
 
   private def waitRequest(id: String, arguments: Vector[String]): Either[String, CliRequest] =
     for {
@@ -403,7 +774,8 @@ object OcelotCtl {
         "maxTicks" -> maxTicks,
         "timeoutMillis" -> ujson.Num(timeoutMillis.toDouble)
       ),
-      value => s"${value("stopReason")("type").str} after ${value("elapsedTicks").num.toInt} ticks"
+      value => s"${value("stopReason")("type").str} after ${value("elapsedTicks").num.toInt} ticks",
+      Some("summary")
     )
 
   private def clockRequest(method: String, params: ujson.Obj): CliRequest =
@@ -558,7 +930,7 @@ object OcelotCtl {
   }
 
   private val usage =
-    "usage: ocelotctl [--project <path>] [--json] <project|version|workspace|machine|simulation|screen|snapshot|diagnostics> ..."
+    "usage: ocelotctl [--project <path>] [--json] <project|version|workspace|machine|simulation|screen|snapshot|diagnostics|trace|metrics|profile|record|replay|sweep|debug|jfr> ..."
 
   private[app] val ReferenceMarkdown: String =
     """# Ocelot Harness CLI reference
@@ -585,6 +957,7 @@ object OcelotCtl {
       |ocelotctl batch
       |ocelotctl workspace describe
       |ocelotctl machine <start|stop|reset> <computer-id>
+      |ocelotctl machine status <computer-id>
       |ocelotctl simulation run --screen <id> --contains <text> [--max-ticks <n>] [--timeout <n>ms|<n>s]
       |ocelotctl simulation start [--tps <1..1000>]
       |ocelotctl simulation pause
@@ -605,10 +978,35 @@ object OcelotCtl {
       |ocelotctl screen capture <screen-id> --format <png|text|cells-json> [--path <relative-path>] [--scale <n>]
       |ocelotctl snapshot save <name> [--host-disks <reference-only|copy>]
       |ocelotctl snapshot load <name>
+      |ocelotctl snapshot diff <from-name> <to-name>
       |ocelotctl media eject <disk-drive-id>
       |ocelotctl redstone input <computer-id> <side> <0..15>
       |ocelotctl diagnostics collect [--path <relative-path>]
       |```
+      |
+      |Observability commands:
+      |
+      |```text
+      |ocelotctl trace [--computer <id>] [--kind <call,signal_queued,signal_taken,input,crash,started,stopped,note>] [--name <text>] [--after <sequence>] [--limit <1..5000>]
+      |ocelotctl metrics [--computer <id>]
+      |ocelotctl metrics --history <n> [--computer <id>]
+      |ocelotctl metrics reset
+      |ocelotctl profile start [--computer <id>]
+      |ocelotctl profile stop [--path <relative-path>]
+      |ocelotctl simulation mode [threaded | deterministic [--server-tps <n>]]
+      |ocelotctl record start <name>
+      |ocelotctl record stop
+      |ocelotctl replay <name> [--until-screen <screen-id> --contains <text>] [--timeout <n>ms|<n>s]
+      |ocelotctl sweep <snapshot-name> --screen <screen-id> --contains <text> [--runs <n>] [--max-ticks <n>] [--min-tps <n>] [--max-tps <n>] [--seed <n>] [--timeout <n>ms|<n>s]
+      |ocelotctl debug break <file> [line ...]
+      |ocelotctl debug <pause|state|stack|continue|step|next|out>
+      |ocelotctl debug wait [--after <pause-sequence>] [--timeout <n>ms|<n>s]
+      |ocelotctl debug vars [<reference>]
+      |ocelotctl jfr start
+      |ocelotctl jfr stop [--path <relative-path>]
+      |```
+      |
+      |`trace` reads the flight recorder: every component call with its arguments, results and time, every signal queued and taken (modem messages included), and the input the harness delivered. `metrics` shows how close each computer runs to OpenComputers' limits: memory, the longest run without yielding against the 5 s timeout, the per-tick call budget, and the 256-signal queue. `profile` samples where Lua spends its time and writes a flame graph (`.svg`) and folded stacks (`.folded.txt`). `simulation mode deterministic` runs every computer on the tick thread in a fixed order, so a run repeats exactly; `--server-tps` models a server running slower, which gives computers more slices per tick. `record` saves a state and logs every input and speed change after it; `replay` runs that again, reports the first tick where it diverges, and with `--until-screen` stops at the first tick the text shows. `sweep` reruns a save state under seeded server-lag patterns and lists the seeds that fail; each seed reruns the same pattern. `debug break` sets the breakpoints for one file (no lines clears them); a computer stopped on a breakpoint pauses the whole simulation until it continues. `snapshot diff` compares two save states by device names, card slots and screen lines, and the files of host-folder disks when both copied them. `jfr` records the service JVM itself with Java Flight Recorder for JDK Mission Control. `ocelot-dap` is the debug adapter for the VS Code extension in `tools/vscode-ocelot`.
       |
       |Daemon lifecycle commands:
       |
@@ -620,13 +1018,30 @@ object OcelotCtl {
       |ocelot-harnessd serve <--stdio|--loopback> --project <path>
       |```
       |
-      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. `redstone input` sets what a computer's redstone card reads on one side (bottom, top, back, front, right, left, or 0–5), as a neighbouring block would; a rise to the card's wake threshold starts a stopped computer. `batch` keeps one process for many commands: each stdin line is a JSON array of arguments (global options included), and each answer is one stdout line `{"exit", "stdout", "stderr"}`. Typed keys wait whole ticks for room in the computer's 256-signal queue, so typing never drops keys, and typing and pasting return once the computer has taken the input, so the next screen read shows what it did; a computer that takes no input for 2000 ticks in a row fails it. Each key down and up costs the computer a slice, about 12 ms; a paste is one signal per line. Artifact paths are project-relative and remain inside the configured artifact root.
+      |Project init/inspect/import/validate commands run locally without a daemon. Desktop import copies bounded compatible source data and never modifies the original directory. Schema-v2 clocks auto-start by default; schema-v1 sessions start paused. Target TPS is bounded to 1–1000, manual step count to 1–10000, and measured TPS is informational rather than a real-time guarantee. Coordinates are one-based. All waits require positive tick and wall-clock bounds. Human-readable screen reads and waits request compact protocol projections; `--json` retains complete protocol responses. `redstone input` sets what a computer's redstone card reads on one side (bottom, top, back, front, right, left, or 0–5), as a neighbouring block would; a rise to the card's wake threshold starts a stopped computer. `batch` keeps one process for many commands: each stdin line is a JSON array of arguments (global options included), and each answer is one stdout line `{"exit", "stdout", "stderr"}`. Typed keys wait whole ticks for room in the computer's 256-signal queue, so typing never drops keys, and typing and pasting return once the computer has taken the input, so the next screen read shows what it did; a computer that takes no input for 2000 ticks in a row fails it. Each key down and up costs the computer a slice, about 12 ms; a paste is one signal per line. Artifact paths are project-relative and remain inside the configured artifact root.
       |""".stripMargin
+
+  private def machineStatusHuman(value: ujson.Value): String = {
+    val head = s"${value("computerId").str}: ${value("state").str}"
+    value("memory") match {
+      case ujson.Null => s"$head, memory not yet reported"
+      case memory =>
+        val used = memory("usedBytes").str.toLong
+        val total = memory("totalBytes").str.toLong
+        f"$head, memory $used / $total bytes used (${used * 100.0 / total}%.1f%%)"
+    }
+  }
 
   private final case class Global(projectRoot: Path, json: Boolean, arguments: Vector[String])
   private final case class CliRequest(
       method: String,
       params: ujson.Obj,
-      human: ujson.Value => String
-  )
+      human: ujson.Value => String,
+      humanProjection: Option[String] = None
+  ) {
+    def paramsFor(jsonOutput: Boolean): ujson.Obj = {
+      if (!jsonOutput) humanProjection.foreach(value => params("projection") = value)
+      params
+    }
+  }
 }

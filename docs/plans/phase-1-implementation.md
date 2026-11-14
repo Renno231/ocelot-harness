@@ -528,6 +528,15 @@ A separate `harness-app` Swing process attaches to the existing authenticated lo
 
 Viewer acceptance requires pure decoding/geometry/input tests without a display, a real loopback test proving a persistent viewer connection does not block concurrent CLI clients, packaged `--help` verification, and a headed smoke showing a live screen revision after external input. Closing the viewer must release its worker and connection without stopping the project daemon. Ocelot Desktop remains outside the boundary.
 
+## Post-Phase 1 extension — Observability
+
+- **Status:** Implemented
+- **Decision:** [ADR 0005](../decisions/0005-observability.md)
+
+A flight recorder of component calls and signals, per-computer meters against OpenComputers' limits, a sampling profiler with flame graphs, a deterministic execution mode with recording, replay, first-tick bisection and lag sweeps, a debugger (breakpoints, stepping, stack, locals, world paused) with a VS Code adapter, snapshot diffs, JVM flight recordings, viewer graphs, and recorder/meter contents in diagnostic bundles. The pinned brain stays unmodified.
+
+Acceptance: `ObservabilitySpec` drives every feature against the real brain in a forked JVM (trace, metrics, profile artifacts, breakpoint/step/continue with the clock paused, exact 100-tick replay across a speed change, bisection, divergence on a changed host file, a 3-seed sweep, snapshot diff with copied disk files, a JFR artifact, bundle entries, and no instrumentation faults); `OcelotDapSpec` plays VS Code's debugger messages against a real daemon; `JsonRpcEndpointSpec` covers parameter validation and encoding; `ViewerModelSpec` covers the graph timeline. Every CLI command and the viewer's graphs were also checked by hand against a running service.
+
 ## Canonical verification target
 
 After the foundation milestone, these commands are the required interfaces:

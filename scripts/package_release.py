@@ -38,9 +38,11 @@ LAUNCHERS = (
     "ocelotctl",
     "ocelot-harnessd",
     "ocelot-viewer",
+    "ocelot-dap",
     "ocelotctl.cmd",
     "ocelot-harnessd.cmd",
     "ocelot-viewer.cmd",
+    "ocelot-dap.cmd",
     "run-harness",
     "run-harness.cmd",
     "java-common.sh",
@@ -66,6 +68,11 @@ EXAMPLE_FILES = (
     "examples/two-computers/beta/firmware/project-loader.lua",
     "examples/two-computers/beta/init.lua",
     "examples/two-computers/ocelot-harness.conf",
+)
+EDITOR_FILES = (
+    "tools/vscode-ocelot/README.md",
+    "tools/vscode-ocelot/extension.js",
+    "tools/vscode-ocelot/package.json",
 )
 HEX_COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 SAFE_VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]*\Z")
@@ -392,6 +399,7 @@ def _verify_release_inputs_clean(repository_root: Path) -> None:
         *(source for source, _ in ROOT_FILE_COPIES),
         *REFERENCE_DOCUMENTS,
         *EXAMPLE_FILES,
+        *EDITOR_FILES,
         "project/runtime-distributions.json",
         "lib/ocelot-brain",
     ]
@@ -505,7 +513,7 @@ def _stage_release(
     for source_name, destination_name in ROOT_FILE_COPIES:
         source = _require_source_file(repository_root, PurePosixPath(source_name))
         _copy_file(source, release_root / destination_name, 0o644)
-    for document in (*REFERENCE_DOCUMENTS, *EXAMPLE_FILES):
+    for document in (*REFERENCE_DOCUMENTS, *EXAMPLE_FILES, *EDITOR_FILES):
         relative = PurePosixPath(document)
         source = _require_source_file(repository_root, relative)
         _copy_file(source, release_root.joinpath(*relative.parts), 0o644)

@@ -58,6 +58,8 @@ class ReleaseFixture:
             self._put(name, f"public document {name}\n")
         for name in package_release.EXAMPLE_FILES:
             self._put(name, f"synthetic example file {name}\n")
+        for name in package_release.EDITOR_FILES:
+            self._put(name, f"editor extension file {name}\n")
 
         # These inputs must never enter an allowlist-driven release, including
         # ignored runtime output nested inside the public example directory.
@@ -374,6 +376,7 @@ class PackageReleaseTests(unittest.TestCase):
                 f"{root}/docs/reference/viewer.md",
                 f"{root}/docs/reference/desktop-import.md",
                 *(f"{root}/{name}" for name in package_release.EXAMPLE_FILES),
+                *(f"{root}/{name}" for name in package_release.EDITOR_FILES),
             }
             self.assertTrue(expected.issubset(members))
             all_names = set(members)

@@ -353,8 +353,13 @@ private[runtime] object SnapshotStore {
       remaining: Long
   ): Long = {
     var total = 0L
-    val excludedRoots = Vector(project.paths.artifacts, project.paths.snapshots)
-      .map(_.toAbsolutePath.normalize())
+    // The running service keeps its lock and connection files in .ocelot-harness; they are
+    // not the computer's files, and Windows refuses to read a locked one.
+    val excludedRoots = Vector(
+      project.paths.artifacts,
+      project.paths.snapshots,
+      project.paths.projectRoot.resolve(".ocelot-harness")
+    ).map(_.toAbsolutePath.normalize())
     constructed.managedDisks.foreach { case (key, source) =>
       val sourceRoot = source.toRealPath()
       val targetRoot = destination.resolve(key).normalize()

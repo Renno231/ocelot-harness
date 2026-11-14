@@ -120,4 +120,13 @@ object HarnessError {
   final case class DiagnosticFailed(message: String) extends HarnessError {
     override val code: String = "diagnostic_failed"
   }
+
+  /** A computer is stopped at a breakpoint and the command needs the world to move. */
+  final case class DebuggerPaused(message: String) extends HarnessError {
+    override val code: String = "debugger_paused"
+  }
+
+  final case class RecordingInvalid(message: String) extends HarnessError {
+    override val code: String = "recording_invalid"
+  }
 }

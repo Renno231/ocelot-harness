@@ -12,7 +12,7 @@ import ocelot.harness.core.HarnessError
 import ocelot.harness.core.HarnessError.{InputUnavailable, InvalidInput}
 import ocelot.harness.core.workspace.{InputResult, UserInput}
 
-private[runtime] final class InputController {
+private[runtime] final class InputController(waitForSlices: () => Boolean = () => true) {
   private val clipboardSplitter = new ClipboardSplitter
 
   def send(
@@ -190,7 +190,9 @@ private[runtime] final class InputController {
   private def tick(machines: Vector[Machine], advanceTick: () => Unit): Unit = {
     advanceTick()
     val deadline = System.nanoTime() + 50000000L
-    while (machines.exists(MachineInternals.sliceDue) && System.nanoTime() < deadline)
+    while (
+      waitForSlices() && machines.exists(MachineInternals.sliceDue) && System.nanoTime() < deadline
+    )
       LockSupport.parkNanos(200000L)
   }
 

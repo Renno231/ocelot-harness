@@ -60,6 +60,7 @@ private[app] final class JsonRpcEndpoint(
         case "machine.start"      => machine(call.params, session.startMachine)
         case "machine.stop"       => machine(call.params, session.stopMachine)
         case "machine.reset"      => machine(call.params, session.resetMachine)
+        case "machine.status"     => machine(call.params, session.machineStatus)
         case "simulation.run"     => run(call.params)
         case "simulation.start"   => startClock(call.params)
         case "simulation.pause"   => domain(session.pauseClock()).map(JsonCodec.clock)
@@ -67,12 +68,11 @@ private[app] final class JsonRpcEndpoint(
         case "simulation.step"    => stepClock(call.params)
         case "simulation.rate"    => rateClock(call.params)
         case "simulation.status"  => domain(session.clockStatus()).map(JsonCodec.clock)
-        case "screen.read" =>
-          screenId(call.params).flatMap(id => domain(session.readScreen(id))).map(JsonCodec.screen)
-        case "screen.input"   => input(call.params)
-        case "screen.capture" => capture(call.params)
-        case "snapshot.save"  => saveSnapshot(call.params)
-        case "snapshot.load"  => loadSnapshot(call.params)
+        case "screen.read"        => readScreen(call.params)
+        case "screen.input"       => input(call.params)
+        case "screen.capture"     => capture(call.params)
+        case "snapshot.save"      => saveSnapshot(call.params)
+        case "snapshot.load"      => loadSnapshot(call.params)
         case "media.eject" =>
           string(call.params, "deviceId")
             .flatMap(id => domain(session.ejectMedia(id)))
@@ -92,6 +92,53 @@ private[app] final class JsonRpcEndpoint(
             )
           }
         case "diagnostics.collect" => diagnostics(call.params)
+        case "trace.read"          => readTrace(call.params)
+        case "metrics.read" =>
+          domain(session.machineMetrics()).map(values =>
+            ujson.Obj("computers" -> ujson.Arr.from(values.map(JsonCodec.metrics)))
+          )
+        case "metrics.history" => metricsHistory(call.params)
+        case "metrics.reset" =>
+          domain(session.resetMetrics()).map(_ => ujson.Obj("reset" -> true))
+        case "profile.start" =>
+          optionalComputerId(call.params)
+            .flatMap(id => domain(session.startProfile(id)))
+            .map(_ => ujson.Obj("profiling" -> true))
+        case "profile.stop"      => stopProfile(call.params)
+        case "simulation.mode"   => executionMode(call.params)
+        case "recording.start"   => startRecording(call.params)
+        case "recording.stop"    => domain(session.stopRecording()).map(JsonCodec.recording)
+        case "recording.replay"  => replay(call.params)
+        case "simulation.sweep"  => sweep(call.params)
+        case "debug.breakpoints" => breakpoints(call.params)
+        case "debug.pause"       => domain(session.debugPause()).map(JsonCodec.debugState)
+        case "snapshot.diff" =>
+          for {
+            from <- snapshotName(call.params, "from")
+            to <- snapshotName(call.params, "to")
+            result <- domain(session.diffSnapshots(from, to))
+          } yield JsonCodec.snapshotComparison(result)
+        case "jvm.recording.start" =>
+          domain(session.startJvmRecording()).map(_ => ujson.Obj("recording" -> true))
+        case "jvm.recording.stop" =>
+          string(call.params, "path")
+            .flatMap(path => domain(session.stopJvmRecording(path)))
+            .map(artifact => ujson.Obj("artifact" -> JsonCodec.artifact(artifact)))
+        case "debug.state" => debugState(call.params)
+        case "debug.frames" =>
+          domain(session.debugFrames()).map(frames =>
+            ujson.Obj("frames" -> ujson.Arr.from(frames.map(JsonCodec.debugFrame)))
+          )
+        case "debug.variables" =>
+          string(call.params, "reference")
+            .flatMap(reference => domain(session.debugVariables(reference)))
+            .map(values =>
+              ujson.Obj("variables" -> ujson.Arr.from(values.map(JsonCodec.debugVariable)))
+            )
+        case "debug.resume" =>
+          optionalString(call.params, "mode", "continue")
+            .flatMap(mode => domain(session.debugResume(mode)))
+            .map(JsonCodec.debugState)
         case "service.shutdown" =>
           shutdown()
           Right(ujson.Obj("shuttingDown" -> true))
@@ -140,6 +187,7 @@ private[app] final class JsonRpcEndpoint(
         case None        => Right(TickPace.Accelerated)
         case Some(value) => tickPace(value)
       }
+      projection <- responseProjection(params)
       result <- domain(
         session.run(
           RunRequest(
@@ -151,7 +199,14 @@ private[app] final class JsonRpcEndpoint(
           )
         )
       )
-    } yield JsonCodec.run(result)
+    } yield JsonCodec.run(result, projection)
+
+  private def readScreen(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      id <- screenId(params)
+      projection <- responseProjection(params)
+      result <- domain(session.readScreen(id))
+    } yield JsonCodec.screen(result, projection)
 
   private def startClock(params: ujson.Obj): Either[RpcFailure, ujson.Value] = {
     val requested =
@@ -232,6 +287,153 @@ private[app] final class JsonRpcEndpoint(
       "artifact" -> JsonCodec.artifact(result.artifact),
       "entries" -> ujson.Arr.from(result.entries)
     )
+
+  private def readTrace(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      id <- optionalComputerId(params)
+      kinds <- optionalStrings(params, "kinds")
+      name <- optionalStringValue(params, "nameContains")
+      after <- optionalLong(params, "afterSequence", 0L)
+      limit <- optionalInt(params, "limit", 200)
+      page <- domain(
+        session.readTrace(TraceQuery(id.map(_.value), kinds.toSet, name, after, limit))
+      )
+    } yield JsonCodec.trace(page)
+
+  private def metricsHistory(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      id <- optionalComputerId(params)
+      after <- optionalLong(params, "afterTick", -1L)
+      samples <- domain(session.metricsHistory(id, after))
+    } yield ujson.Obj("samples" -> ujson.Arr.from(samples.map(JsonCodec.metricsSample)))
+
+  private def stopProfile(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      path <- optionalStringValue(params, "path")
+      result <- domain(session.stopProfile(path))
+    } yield {
+      val (report, artifacts) = result
+      val value = JsonCodec.profile(report)
+      value("artifacts") = ujson.Arr.from(artifacts.map(JsonCodec.artifact))
+      value
+    }
+
+  private def executionMode(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    optionalStringValue(params, "mode")
+      .flatMap {
+        case None             => domain(session.executionMode())
+        case Some("threaded") => domain(session.setExecutionMode(ExecutionMode.Threaded))
+        case Some("deterministic") =>
+          optionalInt(params, "serverTps", 20).flatMap(tps =>
+            domain(session.setExecutionMode(ExecutionMode.Deterministic(tps)))
+          )
+        case Some(other) => Left(RpcFailure.invalidParams(s"unsupported execution mode: $other"))
+      }
+      .map(JsonCodec.executionMode)
+
+  private def snapshotName(params: ujson.Obj, field: String): Either[RpcFailure, SnapshotName] =
+    string(params, field).flatMap(value =>
+      SnapshotName.parse(value).left.map(RpcFailure.invalidParams)
+    )
+
+  private def startRecording(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    snapshotName(params, "name")
+      .flatMap(name => domain(session.startRecording(name)))
+      .map(JsonCodec.recording)
+
+  private def replay(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      name <- snapshotName(params, "name")
+      until <- optionalObj(params, "until").flatMap {
+        case None        => Right(None)
+        case Some(value) => stopCondition(value).map(Some(_))
+      }
+      timeoutMillis <- boundedPositiveLong(params, "timeoutMillis", 300000L)
+      result <- domain(
+        session.replay(ReplayRequest(name, until, timeoutMillis.millis, runCancellation))
+      )
+    } yield JsonCodec.replay(result)
+
+  private def sweep(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      name <- snapshotName(params, "snapshot")
+      condition <- obj(params, "condition").flatMap(stopCondition)
+      runs <- boundedPositiveInt(params, "runs", 100)
+      maxTicks <- boundedPositiveInt(params, "maxTicks", 10000000)
+      minTps <- optionalInt(params, "minServerTps", 5)
+      maxTps <- optionalInt(params, "maxServerTps", 20)
+      seed <- optionalLong(params, "seed", 1L)
+      timeoutMillis <- boundedPositiveLong(params, "timeoutMillis", 300000L)
+      result <- domain(
+        session.sweep(
+          SweepRequest(
+            name,
+            condition,
+            runs,
+            maxTicks,
+            minTps,
+            maxTps,
+            seed,
+            timeoutMillis.millis,
+            runCancellation
+          )
+        )
+      )
+    } yield JsonCodec.sweep(result)
+
+  private def breakpoints(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      file <- string(params, "file")
+      path <-
+        (try Right(java.nio.file.Paths.get(file))
+        catch { case NonFatal(_) => Left(RpcFailure.invalidParams(s"file is not a path: $file")) })
+      lines <- params.value.get("lines") match {
+        case Some(ujson.Arr(values)) if values.size <= 1000 =>
+          values.foldLeft[Either[RpcFailure, Vector[Int]]](Right(Vector.empty)) {
+            case (Right(collected), ujson.Num(number))
+                if number == math.rint(number) && number >= 1 && number <= Int.MaxValue =>
+              Right(collected :+ number.toInt)
+            case (Right(_), _) => Left(RpcFailure.invalidParams("lines must be positive integers"))
+            case (failure, _)  => failure
+          }
+        case _ => Left(RpcFailure.invalidParams("lines must be an array of at most 1000 lines"))
+      }
+      result <- domain(session.setBreakpoints(path, lines))
+    } yield ujson.Obj("breakpoints" -> ujson.Arr.from(result.map(JsonCodec.breakpoint)))
+
+  private def debugState(params: ujson.Obj): Either[RpcFailure, ujson.Value] =
+    for {
+      after <-
+        if (params.value.contains("afterSequence")) long(params, "afterSequence").map(Some(_))
+        else Right(None)
+      wait <- optionalLong(params, "waitMillis", 0L)
+      state <- domain(session.debugState(after, wait))
+    } yield JsonCodec.debugState(state)
+
+  private def optionalComputerId(params: ujson.Obj): Either[RpcFailure, Option[ComputerId]] =
+    optionalStringValue(params, "computerId").flatMap {
+      case None        => Right(None)
+      case Some(value) => ComputerId.parse(value).left.map(RpcFailure.invalidParams).map(Some(_))
+    }
+
+  private def optionalStringValue(
+      value: ujson.Obj,
+      field: String
+  ): Either[RpcFailure, Option[String]] =
+    value.value.get(field) match {
+      case None | Some(ujson.Null) => Right(None)
+      case Some(ujson.Str(text))   => Right(Some(text))
+      case _                       => Left(RpcFailure.invalidParams(s"$field must be a string"))
+    }
+
+  private def optionalStrings(value: ujson.Obj, field: String): Either[RpcFailure, Vector[String]] =
+    value.value.get(field) match {
+      case None | Some(ujson.Null) => Right(Vector.empty)
+      case Some(ujson.Arr(values))
+          if values.forall(_.isInstanceOf[ujson.Str]) && values.size <= 32 =>
+        Right(values.map(_.str).toVector)
+      case _ => Left(RpcFailure.invalidParams(s"$field must be an array of strings"))
+    }
 
   private def stopCondition(value: ujson.Obj): Either[RpcFailure, StopCondition] =
     string(value, "type").flatMap {
@@ -481,6 +683,14 @@ private[app] final class JsonRpcEndpoint(
       case _                       => Left(RpcFailure.invalidParams(s"$field must be a string"))
     }
 
+  private def responseProjection(value: ujson.Obj): Either[RpcFailure, ResponseProjection] =
+    optionalString(value, "projection", "full").flatMap {
+      case "summary" => Right(ResponseProjection.Summary)
+      case "text"    => Right(ResponseProjection.Text)
+      case "full"    => Right(ResponseProjection.Full)
+      case other     => Left(RpcFailure.invalidParams(s"unsupported projection: $other"))
+    }
+
   private def optionalInt(value: ujson.Obj, field: String, default: Int): Either[RpcFailure, Int] =
     if (value.value.contains(field)) int(value, field) else Right(default)
 
@@ -520,7 +730,9 @@ private[app] object StdioTransport {
 
     val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
     val writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), true)
-    var framed = if (keepRunning()) readBoundedLine(reader) else None
+    // A .NET caller writing to stdin under a UTF-8 console code page starts with a byte order mark.
+    var framed =
+      if (keepRunning()) readBoundedLine(reader).map(_.map(_.stripPrefix("﻿"))) else None
     while (framed.nonEmpty) {
       val line = framed.get.getOrElse("")
       endpoint.handleLine(line).foreach(writer.println)
@@ -545,6 +757,14 @@ private[app] object StdioTransport {
     if (!sawInput && character < 0) None
     else Some(if (tooLong) Left(()) else Right(result.toString()))
   }
+}
+
+private sealed trait ResponseProjection extends Product with Serializable
+
+private object ResponseProjection {
+  case object Summary extends ResponseProjection
+  case object Text extends ResponseProjection
+  case object Full extends ResponseProjection
 }
 
 private final case class RpcCall(id: Option[ujson.Value], method: String, params: ujson.Obj)
@@ -612,7 +832,16 @@ private object JsonCodec {
     ujson.Obj(
       "computerId" -> value.id.value,
       "state" -> machineStateName(value.state),
-      "lastError" -> value.lastError.map[ujson.Value](ujson.Str).getOrElse(ujson.Null)
+      "lastError" -> value.lastError.map[ujson.Value](ujson.Str).getOrElse(ujson.Null),
+      "memory" -> value.memory
+        .map[ujson.Value](memory =>
+          ujson.Obj(
+            "totalBytes" -> int64(memory.totalBytes),
+            "freeBytes" -> int64(memory.freeBytes),
+            "usedBytes" -> int64(memory.usedBytes)
+          )
+        )
+        .getOrElse(ujson.Null)
     )
 
   def clock(value: SimulationClockStatus): ujson.Value =
@@ -625,58 +854,98 @@ private object JsonCodec {
       "lastTickDurationNanos" -> int64(value.lastTickDurationNanos)
     )
 
-  def screen(value: ScreenSnapshot): ujson.Value =
+  def screen(value: ScreenSnapshot, projection: ResponseProjection): ujson.Value =
+    projection match {
+      case ResponseProjection.Summary => screenSummary(value)
+      case ResponseProjection.Text =>
+        val result = screenSummary(value)
+        result("text") = value.text
+        result
+      case ResponseProjection.Full =>
+        ujson.Obj(
+          "screenId" -> value.id.value,
+          "revision" -> int64(value.revision),
+          "width" -> value.width,
+          "height" -> value.height,
+          "text" -> value.text,
+          "cells" -> ujson.Arr.from(
+            value.cells.map(cell =>
+              ujson.Obj(
+                "codePoint" -> cell.codePoint,
+                "foreground" -> (cell.foreground & 0xffffff),
+                "background" -> (cell.background & 0xffffff),
+                "packedColor" -> (cell.packedColor & 0xffff)
+              )
+            )
+          ),
+          "palette" -> ujson.Arr.from(value.palette),
+          "colorDepth" -> value.colorDepth,
+          "powered" -> value.powered,
+          "captureTick" -> int64(value.captureTick),
+          "runtimeAddress" -> value.runtimeAddress
+            .map[ujson.Value](ujson.Str)
+            .getOrElse(ujson.Null),
+          "precisionMode" -> value.precisionMode
+        )
+    }
+
+  def run(value: RunResult, projection: ResponseProjection): ujson.Value =
+    projection match {
+      case ResponseProjection.Summary => runSummary(value)
+      case ResponseProjection.Text =>
+        val result = runSummary(value)
+        result("screens") = ujson.Obj.from(value.screens.toVector.map { case (id, snapshot) =>
+          id.value -> screen(snapshot, ResponseProjection.Text)
+        })
+        result
+      case ResponseProjection.Full =>
+        ujson.Obj(
+          "stopReason" -> stopReason(value.stopReason),
+          "elapsedTicks" -> value.elapsedTicks,
+          "elapsedWallTimeMillis" -> int64(value.elapsedWallTime.toMillis),
+          "machines" -> ujson.Arr.from(value.machines.map(machine)),
+          "screenRevisions" -> screenRevisions(value.screenRevisions),
+          "events" -> eventSnapshot(value.events),
+          "screens" -> ujson.Obj.from(value.screens.toVector.map { case (id, snapshot) =>
+            id.value -> screen(snapshot, ResponseProjection.Full)
+          }),
+          "timeline" -> ujson.Arr.from(
+            value.timeline.map(observation =>
+              ujson.Obj(
+                "elapsedTicks" -> observation.elapsedTicks,
+                "elapsedWallTimeMillis" -> int64(observation.elapsedWallTime.toMillis),
+                "machines" -> ujson.Arr.from(observation.machines.map(machine)),
+                "screenRevisions" -> screenRevisions(observation.screenRevisions)
+              )
+            )
+          ),
+          "timelineDroppedCount" -> int64(value.timelineDroppedCount)
+        )
+    }
+
+  private def screenSummary(value: ScreenSnapshot): ujson.Obj =
     ujson.Obj(
       "screenId" -> value.id.value,
       "revision" -> int64(value.revision),
       "width" -> value.width,
       "height" -> value.height,
-      "text" -> value.text,
-      "cells" -> ujson.Arr.from(
-        value.cells.map(cell =>
-          ujson.Obj(
-            "codePoint" -> cell.codePoint,
-            "foreground" -> (cell.foreground & 0xffffff),
-            "background" -> (cell.background & 0xffffff),
-            "packedColor" -> (cell.packedColor & 0xffff)
-          )
-        )
-      ),
-      "palette" -> ujson.Arr.from(value.palette),
-      "colorDepth" -> value.colorDepth,
       "powered" -> value.powered,
-      "captureTick" -> int64(value.captureTick),
-      "runtimeAddress" -> value.runtimeAddress.map[ujson.Value](ujson.Str).getOrElse(ujson.Null),
-      "precisionMode" -> value.precisionMode
+      "captureTick" -> int64(value.captureTick)
     )
 
-  def run(value: RunResult): ujson.Value =
+  private def runSummary(value: RunResult): ujson.Obj =
     ujson.Obj(
       "stopReason" -> stopReason(value.stopReason),
       "elapsedTicks" -> value.elapsedTicks,
       "elapsedWallTimeMillis" -> int64(value.elapsedWallTime.toMillis),
       "machines" -> ujson.Arr.from(value.machines.map(machine)),
-      "screenRevisions" -> ujson.Obj.from(value.screenRevisions.toVector.map {
-        case (id, revision) => id.value -> int64(revision)
-      }),
-      "events" -> eventSnapshot(value.events),
-      "screens" -> ujson.Obj.from(value.screens.toVector.map { case (id, snapshot) =>
-        id.value -> screen(snapshot)
-      }),
-      "timeline" -> ujson.Arr.from(
-        value.timeline.map(observation =>
-          ujson.Obj(
-            "elapsedTicks" -> observation.elapsedTicks,
-            "elapsedWallTimeMillis" -> int64(observation.elapsedWallTime.toMillis),
-            "machines" -> ujson.Arr.from(observation.machines.map(machine)),
-            "screenRevisions" -> ujson.Obj.from(observation.screenRevisions.toVector.map {
-              case (id, revision) => id.value -> int64(revision)
-            })
-          )
-        )
-      ),
-      "timelineDroppedCount" -> int64(value.timelineDroppedCount)
+      "screenRevisions" -> screenRevisions(value.screenRevisions)
     )
+
+  private def screenRevisions(value: Map[ScreenId, Long]): ujson.Obj =
+    ujson.Obj.from(value.toVector.map { case (id, revision) =>
+      id.value -> int64(revision)
+    })
 
   def snapshot(value: SnapshotDescription): ujson.Value =
     ujson.Obj(
@@ -688,6 +957,165 @@ private object JsonCodec {
       "captureTick" -> int64(value.captureTick),
       "copiedDiskBytes" -> int64(value.copiedDiskBytes)
     )
+
+  def trace(value: TracePage): ujson.Value =
+    ujson.Obj(
+      "events" -> ujson.Arr.from(value.events.map { event =>
+        ujson.Obj(
+          "sequence" -> int64(event.sequence),
+          "tick" -> int64(event.tick),
+          "computerId" -> optional(event.computerId),
+          "kind" -> event.kind,
+          "name" -> event.name,
+          "arguments" -> ujson.Arr.from(event.arguments),
+          "results" -> ujson.Arr.from(event.results),
+          "durationNanos" -> int64(event.durationNanos),
+          "note" -> optional(event.note)
+        )
+      }),
+      "droppedCount" -> int64(value.droppedCount),
+      "latestSequence" -> int64(value.latestSequence)
+    )
+
+  def metrics(value: MachineMetrics): ujson.Value =
+    ujson.Obj(
+      "computerId" -> value.computerId,
+      "memoryUsedBytes" -> value.memoryUsedBytes.map(int64).getOrElse(ujson.Null),
+      "memoryTotalBytes" -> value.memoryTotalBytes.map(int64).getOrElse(ujson.Null),
+      "memoryPeakBytes" -> int64(value.memoryPeakBytes),
+      "slices" -> int64(value.slices),
+      "cpuNanos" -> int64(value.cpuNanos),
+      "longestSliceNanos" -> int64(value.longestSliceNanos),
+      "sliceTimeoutNanos" -> int64(value.sliceTimeoutNanos),
+      "callBudgetExhausted" -> int64(value.callBudgetExhausted),
+      "peakCallBudgetUsed" -> value.peakCallBudgetUsed,
+      "signalsQueued" -> int64(value.signalsQueued),
+      "signalsTaken" -> int64(value.signalsTaken),
+      "signalQueueDepth" -> value.signalQueueDepth,
+      "signalQueuePeak" -> value.signalQueuePeak,
+      "signalQueueLimit" -> value.signalQueueLimit,
+      "longestSignalWaitTicks" -> int64(value.longestSignalWaitTicks),
+      "calls" -> ujson.Arr.from(value.calls.map { call =>
+        ujson.Obj(
+          "name" -> call.name,
+          "count" -> int64(call.count),
+          "deferred" -> int64(call.deferred),
+          "totalNanos" -> int64(call.totalNanos)
+        )
+      })
+    )
+
+  def metricsSample(value: MetricsSample): ujson.Value =
+    ujson.Obj(
+      "tick" -> int64(value.tick),
+      "computerId" -> value.computerId,
+      "memoryUsedBytes" -> int64(value.memoryUsedBytes),
+      "sliceNanos" -> int64(value.sliceNanos),
+      "signalQueueDepth" -> value.signalQueueDepth,
+      "calls" -> int64(value.calls)
+    )
+
+  def profile(value: ProfileReport): ujson.Obj =
+    ujson.Obj(
+      "computerId" -> optional(value.computerId),
+      "samples" -> int64(value.samples),
+      "ticks" -> int64(value.ticks),
+      "hottestLines" -> ujson.Arr.from(value.hottest.map { case (line, samples) =>
+        ujson.Obj("line" -> line, "samples" -> int64(samples))
+      }),
+      "stacks" -> ujson.Arr.from(value.folded.take(200).map { entry =>
+        ujson.Obj("stack" -> ujson.Arr.from(entry.stack), "samples" -> int64(entry.samples))
+      })
+    )
+
+  def executionMode(value: ExecutionMode): ujson.Value = value match {
+    case ExecutionMode.Threaded => ujson.Obj("mode" -> value.name, "serverTps" -> ujson.Null)
+    case ExecutionMode.Deterministic(tps) => ujson.Obj("mode" -> value.name, "serverTps" -> tps)
+  }
+
+  def recording(value: RecordingStatus): ujson.Value =
+    ujson.Obj(
+      "name" -> value.name,
+      "active" -> value.active,
+      "startTick" -> int64(value.startTick),
+      "ticks" -> int64(value.ticks),
+      "inputs" -> value.inputs,
+      "limitReached" -> value.limitReached
+    )
+
+  def replay(value: ReplayResult): ujson.Value =
+    ujson.Obj(
+      "name" -> value.name,
+      "replayedTicks" -> int64(value.replayedTicks),
+      "recordedTicks" -> int64(value.recordedTicks),
+      "divergedAtTick" -> value.divergedAtTick.map(int64).getOrElse(ujson.Null),
+      "divergence" -> optional(value.divergence),
+      "stoppedAtTick" -> int64(value.stoppedAtTick)
+    )
+
+  def sweep(value: SweepResult): ujson.Value =
+    ujson.Obj(
+      "runs" -> ujson.Arr.from(value.runs.map { run =>
+        ujson.Obj(
+          "seed" -> int64(run.seed),
+          "passed" -> run.passed,
+          "ticks" -> int64(run.ticks),
+          "minServerTps" -> run.minServerTps,
+          "maxServerTps" -> run.maxServerTps
+        )
+      }),
+      "failingSeeds" -> ujson.Arr.from(value.failingSeeds.map(int64))
+    )
+
+  def breakpoint(value: DebugBreakpoint): ujson.Value =
+    ujson.Obj("file" -> value.file, "line" -> value.line)
+
+  def debugState(value: DebugState): ujson.Value =
+    ujson.Obj(
+      "paused" -> value.paused,
+      "computerId" -> optional(value.computerId),
+      "reason" -> optional(value.reason),
+      "pauseSequence" -> int64(value.pauseSequence),
+      "breakpoints" -> ujson.Arr.from(value.breakpoints.map(breakpoint))
+    )
+
+  def snapshotComparison(value: SnapshotComparison): ujson.Value =
+    ujson.Obj(
+      "from" -> value.from,
+      "to" -> value.to,
+      "fromTick" -> int64(value.fromTick),
+      "toTick" -> int64(value.toTick),
+      "totalChanges" -> value.totalChanges,
+      "changes" -> ujson.Arr.from(value.changes.map { change =>
+        ujson.Obj(
+          "path" -> change.path,
+          "change" -> change.change,
+          "before" -> optional(change.before),
+          "after" -> optional(change.after)
+        )
+      }),
+      "notes" -> ujson.Arr.from(value.notes.map(ujson.Str(_)))
+    )
+
+  def debugFrame(value: DebugFrame): ujson.Value =
+    ujson.Obj(
+      "index" -> value.index,
+      "source" -> value.source,
+      "line" -> value.line,
+      "function" -> value.function,
+      "hostPath" -> optional(value.hostPath)
+    )
+
+  def debugVariable(value: DebugVariable): ujson.Value =
+    ujson.Obj(
+      "name" -> value.name,
+      "value" -> value.value,
+      "type" -> value.kind,
+      "reference" -> optional(value.reference)
+    )
+
+  private def optional(value: Option[String]): ujson.Value =
+    value.map[ujson.Value](ujson.Str).getOrElse(ujson.Null)
 
   def machineState(value: String): Either[RpcFailure, MachineState] = value match {
     case "running" => Right(MachineState.Running)

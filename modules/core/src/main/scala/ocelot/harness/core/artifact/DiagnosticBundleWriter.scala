@@ -25,6 +25,7 @@ private[harness] object DiagnosticBundleWriter {
       screens: Map[ocelot.harness.core.project.ScreenId, ScreenSnapshot],
       lastRun: Option[RunResult],
       clock: SimulationClockStatus,
+      inspection: Option[(TracePage, Vector[MachineMetrics])],
       request: DiagnosticRequest,
       store: ArtifactStore
   ): Either[HarnessError, DiagnosticBundle] = {
@@ -48,6 +49,10 @@ private[harness] object DiagnosticBundleWriter {
         entries += "events.txt" -> utf8(eventsSummary(project, events))
         entries += "timeline.txt" -> utf8(timelineSummary(lastRun))
         entries += "error.txt" -> utf8(errorSummary(project, request.failure))
+        inspection.foreach { case (trace, metrics) =>
+          entries += "trace.txt" -> utf8(traceSummary(project, trace))
+          entries += "metrics.txt" -> utf8(metricsSummary(metrics))
+        }
         screens.toVector.sortBy(_._1.value).foreach { case (id, snapshot) =>
           entries += s"screens/${id.value}.txt" -> utf8(snapshot.text + "\n")
           entries += s"screens/${id.value}.cells.json" -> utf8(
@@ -165,6 +170,54 @@ private[harness] object DiagnosticBundleWriter {
     }
     (Vector(s"dropped=${snapshot.droppedCount}") ++ lines).mkString("\n") + "\n"
   }
+
+  /** The flight recorder's most recent events, oldest first, one per line. */
+  private def traceSummary(project: ValidatedProject, page: TracePage): String = {
+    val lines = page.events.map { event =>
+      Vector(
+        event.sequence.toString,
+        event.tick.toString,
+        event.computerId.getOrElse(""),
+        event.kind,
+        event.name,
+        event.arguments.mkString(", "),
+        event.results.mkString(", "),
+        event.durationNanos.toString,
+        event.note.getOrElse("")
+      ).map(value => redact(project, value).replace('\t', ' ').replace('\n', ' ')).mkString("\t")
+    }
+    (Vector(
+      s"dropped=${page.droppedCount}",
+      "sequence\ttick\tcomputer\tkind\tname\targuments\tresults\tdurationNanos\tnote"
+    ) ++ lines).mkString("\n") + "\n"
+  }
+
+  private def metricsSummary(metrics: Vector[MachineMetrics]): String =
+    metrics
+      .sortBy(_.computerId)
+      .map { value =>
+        (Vector(
+          s"computer=${value.computerId}",
+          s"memoryUsedBytes=${value.memoryUsedBytes.getOrElse("")}",
+          s"memoryTotalBytes=${value.memoryTotalBytes.getOrElse("")}",
+          s"memoryPeakBytes=${value.memoryPeakBytes}",
+          s"slices=${value.slices}",
+          s"cpuNanos=${value.cpuNanos}",
+          s"longestSliceNanos=${value.longestSliceNanos}",
+          s"sliceTimeoutNanos=${value.sliceTimeoutNanos}",
+          s"callBudgetExhausted=${value.callBudgetExhausted}",
+          s"peakCallBudgetUsed=${value.peakCallBudgetUsed}",
+          s"signalsQueued=${value.signalsQueued}",
+          s"signalsTaken=${value.signalsTaken}",
+          s"signalQueueDepth=${value.signalQueueDepth}",
+          s"signalQueuePeak=${value.signalQueuePeak}",
+          s"signalQueueLimit=${value.signalQueueLimit}",
+          s"longestSignalWaitTicks=${value.longestSignalWaitTicks}"
+        ) ++ value.calls.map(call =>
+          s"call=${call.name} count=${call.count} deferred=${call.deferred} totalNanos=${call.totalNanos}"
+        )).mkString("\n")
+      }
+      .mkString("", "\n\n", "\n")
 
   private def errorSummary(
       project: ValidatedProject,

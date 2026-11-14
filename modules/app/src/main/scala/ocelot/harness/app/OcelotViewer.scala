@@ -1,6 +1,17 @@
 package ocelot.harness.app
 
-import java.awt.{BorderLayout, Color, Dimension, FlowLayout, Graphics, GraphicsEnvironment, Toolkit}
+import java.awt.{
+  BasicStroke,
+  BorderLayout,
+  Color,
+  Dimension,
+  FlowLayout,
+  Graphics,
+  Graphics2D,
+  GraphicsEnvironment,
+  RenderingHints,
+  Toolkit
+}
 import java.awt.datatransfer.DataFlavor
 import java.awt.event.{
   ActionEvent,
@@ -32,6 +43,7 @@ import javax.swing.{
   JPanel,
   JScrollPane,
   JSpinner,
+  JToggleButton,
   ScrollPaneConstants,
   SpinnerNumberModel,
   SwingUtilities,
@@ -48,6 +60,8 @@ import ocelot.harness.app.viewer.{
   ViewerClockStatus,
   ViewerGeometry,
   ViewerProtocol,
+  ViewerSample,
+  ViewerTimeline,
   ViewerViewportSize
 }
 import ocelot.harness.core.artifact.{RenderOptions, ScreenRenderer}
@@ -225,6 +239,10 @@ private final class ViewerWindow(
   private val clockStep = new JButton("Step")
   private val targetTps = new JSpinner(new SpinnerNumberModel(20, 1, 1000, 1))
   private val setRate = new JButton("Set TPS")
+  private val graphsToggle = new JToggleButton("Graphs")
+  private val timeline = new ViewerTimeline
+  private val graphs = new ViewerGraphPanel(timeline)
+  private val lastGraphPoll = new java.util.concurrent.atomic.AtomicLong(0L)
 
   def open(): Unit = {
     frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE)
@@ -259,6 +277,18 @@ private final class ViewerWindow(
     val clockActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
     clockActions.add(clockToggle)
     clockActions.add(clockStep)
+    clockActions.add(graphsToggle)
+    graphsToggle.setToolTipText(
+      "Memory, run time, component calls and waiting signals of every computer over the last minute"
+    )
+    graphsToggle.addActionListener((_: ActionEvent) => {
+      graphs.setVisible(graphsToggle.isSelected)
+      lastGraphPoll.set(0L)
+      frame.pack()
+      submitRefresh()
+      screenPanel.requestFocusInWindow()
+    })
+    graphs.setVisible(false)
 
     val rateActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0))
     rateActions.add(targetTps)
@@ -277,6 +307,7 @@ private final class ViewerWindow(
     scroll.getViewport.setBackground(Color.BLACK)
     frame.add(controls, BorderLayout.NORTH)
     frame.add(scroll, BorderLayout.CENTER)
+    frame.add(graphs, BorderLayout.SOUTH)
     frame.setLocationByPlatform(true)
 
     refreshTimer.setCoalesce(true)
@@ -311,8 +342,31 @@ private final class ViewerWindow(
                     case Right(snapshot) =>
                       renderIfChanged(id, snapshot)
                       showStatus(id, snapshot, clock)
+                      if (graphsToggle.isSelected) refreshGraphs()
                   }
               }
+          }
+      }
+    }
+  }
+
+  /** Polls new per-tick readings at most twice a second; the service keeps the last minute. */
+  private def refreshGraphs(): Unit = {
+    val now = System.nanoTime()
+    val last = lastGraphPoll.get()
+    if (last == 0L || now - last >= ViewerGraphPanel.PollNanos) {
+      lastGraphPoll.set(now)
+      connection.call(
+        "metrics.history",
+        ujson.Obj("afterTick" -> timeline.latestTick.toString)
+      ) match {
+        case Left(error) => showError(error.message)
+        case Right(value) =>
+          ViewerTimeline.decode(value) match {
+            case Left(error) => showError(error)
+            case Right(samples) =>
+              timeline.add(samples)
+              SwingUtilities.invokeLater(() => graphs.repaint())
           }
       }
     }
@@ -502,6 +556,71 @@ private final class ViewerWindow(
 
   private def message(error: Throwable): String =
     Option(error.getMessage).filter(_.nonEmpty).getOrElse(error.getClass.getSimpleName)
+}
+
+/** Four stacked line graphs, one line per computer, over the last minute of ticks. */
+private final class ViewerGraphPanel(timeline: ViewerTimeline) extends JPanel {
+  setBackground(new Color(0x16181c))
+  setPreferredSize(
+    new Dimension(480, ViewerGraphPanel.Measures.size * ViewerGraphPanel.StripHeight)
+  )
+
+  override protected def paintComponent(graphics: Graphics): Unit = {
+    super.paintComponent(graphics)
+    val g = graphics.create().asInstanceOf[Graphics2D]
+    try {
+      g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+      val width = getWidth
+      val end = timeline.latestTick
+      val start = end - ViewerTimeline.MaxTicks
+      ViewerGraphPanel.Measures.zipWithIndex.foreach { case ((title, unit, measure), row) =>
+        val top = row * ViewerGraphPanel.StripHeight
+        val plotTop = top + 18
+        val plotHeight = ViewerGraphPanel.StripHeight - 24
+        val series = timeline.series(measure)
+        val observed = series.flatMap(_._2.map(_._2)).foldLeft(0.0)(math.max)
+        val peak = math.max(observed, 1e-9)
+        g.setColor(new Color(0x2a2e35))
+        g.drawLine(0, plotTop + plotHeight, width, plotTop + plotHeight)
+        g.setColor(new Color(0xc8ccd4))
+        val latest = series.map { case (id, points) =>
+          s"$id ${ViewerGraphPanel.format(points.lastOption.map(_._2).getOrElse(0.0))}"
+        }
+        g.drawString(
+          s"$title ($unit), peak ${ViewerGraphPanel.format(observed)}: ${latest.mkString(", ")}",
+          6,
+          top + 13
+        )
+        g.setStroke(new BasicStroke(1.5f))
+        series.zipWithIndex.foreach { case ((_, points), index) =>
+          g.setColor(ViewerGraphPanel.Colors(index % ViewerGraphPanel.Colors.size))
+          val xs = points.map { case (tick, _) =>
+            ((tick - start).toDouble / ViewerTimeline.MaxTicks * width).toInt
+          }
+          val ys = points.map { case (_, value) =>
+            plotTop + plotHeight - (value / peak * plotHeight).toInt
+          }
+          g.drawPolyline(xs.toArray, ys.toArray, points.size)
+        }
+      }
+    } finally g.dispose()
+  }
+}
+
+private object ViewerGraphPanel {
+  val StripHeight = 72
+  val PollNanos: Long = 500L * 1000L * 1000L
+  val Measures: Vector[(String, String, ViewerSample => Double)] = Vector(
+    ("Memory", "KiB", sample => sample.memoryUsedBytes / 1024.0),
+    ("Run time per tick", "ms", sample => sample.sliceNanos / 1e6),
+    ("Component calls per tick", "calls", sample => sample.calls.toDouble),
+    ("Signals waiting", "of 256", sample => sample.signalQueueDepth.toDouble)
+  )
+  val Colors: Vector[Color] =
+    Vector(0x4fc3f7, 0xffb74d, 0x81c784, 0xe57373, 0xba68c8, 0xfff176).map(new Color(_))
+
+  def format(value: Double): String =
+    if (value >= 100.0 || value == math.rint(value)) f"$value%.0f" else f"$value%.2f"
 }
 
 private sealed trait ViewerKey
